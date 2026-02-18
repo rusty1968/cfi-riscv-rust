@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RISC-V CFI — Complete Visual Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #060a10;
+  --surface: #0c1219;
+  --surface2: #121a26;
+  --surface3: #182233;
+  --border: #1c2b44;
+  --text: #d8e2ef;
+  --text2: #7e92b5;
+  --text3: #465a7e;
+  --green: #2dd4a0;
+  --green2: #17b98a;
+  --green-bg: rgba(45,212,160,0.07);
+  --green-border: rgba(45,212,160,0.18);
+  --red: #ef6461;
+  --red-bg: rgba(239,100,97,0.07);
+  --red-border: rgba(239,100,97,0.2);
+  --blue: #5eaeff;
+  --blue-bg: rgba(94,174,255,0.07);
+  --blue-border: rgba(94,174,255,0.18);
+  --amber: #f0b832;
+  --amber-bg: rgba(240,184,50,0.07);
+  --amber-border: rgba(240,184,50,0.18);
+  --purple: #b08cff;
+  --purple-bg: rgba(176,140,255,0.07);
+  --cyan: #36d6d6;
+  --cyan-bg: rgba(54,214,214,0.07);
+  --mono: 'IBM Plex Mono', monospace;
+  --sans: 'Outfit', sans-serif;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:var(--sans); overflow-x:hidden; }
+.noise { position:fixed; inset:0; pointer-events:none; opacity:0.025; background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); z-index:9999; }
+
+.wrap { max-width:1140px; margin:0 auto; padding:40px 20px 80px; }
+
+/* HEADER */
+header { text-align:center; margin-bottom:56px; }
+header .chip {
+  display:inline-flex; align-items:center; gap:8px;
+  font-family:var(--mono); font-size:10px; letter-spacing:2.5px; text-transform:uppercase;
+  color:var(--green); background:var(--green-bg); border:1px solid var(--green-border);
+  padding:7px 18px; border-radius:100px; margin-bottom:20px;
+}
+header .chip .dot { width:6px; height:6px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+header h1 {
+  font-size:clamp(30px,5.5vw,50px); font-weight:800; letter-spacing:-1.5px; line-height:1.1;
+  background:linear-gradient(135deg,#e8edf5 20%,#7e92b5 80%);
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:14px;
+}
+header .sub { color:var(--text2); font-size:15px; max-width:600px; margin:0 auto; line-height:1.65; font-weight:400; }
+
+/* NAV TABS */
+.tabs {
+  display:flex; justify-content:center; gap:6px; margin-bottom:44px; flex-wrap:wrap;
+}
+.tab {
+  font-family:var(--mono); font-size:11px; letter-spacing:0.5px;
+  padding:10px 18px; border:1px solid var(--border); border-radius:10px;
+  background:var(--surface); color:var(--text3); cursor:pointer; transition:all 0.25s;
+  position:relative; overflow:hidden;
+}
+.tab:hover { border-color:var(--text3); color:var(--text2); }
+.tab.active { border-color:var(--blue-border); color:var(--blue); background:var(--blue-bg); }
+.tab .edge-badge {
+  font-size:8px; letter-spacing:1px; text-transform:uppercase; opacity:0.6;
+  display:block; margin-top:2px;
+}
+
+/* PANEL CONTAINER */
+.panel-box {
+  background:var(--surface); border:1px solid var(--border); border-radius:18px;
+  overflow:hidden; position:relative; margin-bottom:28px;
+}
+.panel-box::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,rgba(94,174,255,0.25),transparent);
+}
+.panel { display:none; padding:36px 32px; }
+.panel.active { display:block; animation:fadeUp 0.4s ease; }
+@keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+
+/* Panel header */
+.ph { margin-bottom:28px; }
+.ph .badge {
+  display:inline-flex; align-items:center; gap:6px;
+  font-family:var(--mono); font-size:10px; letter-spacing:1.5px; text-transform:uppercase;
+  padding:5px 14px; border-radius:100px; margin-bottom:14px;
+}
+.ph .badge.fwd { color:var(--amber); background:var(--amber-bg); border:1px solid var(--amber-border); }
+.ph .badge.bwd { color:var(--green); background:var(--green-bg); border:1px solid var(--green-border); }
+.ph .badge.kern { color:var(--purple); background:var(--purple-bg); border:1px solid rgba(176,140,255,0.18); }
+.ph .badge.combo { color:var(--cyan); background:var(--cyan-bg); border:1px solid rgba(54,214,214,0.18); }
+.ph h2 { font-size:24px; font-weight:700; letter-spacing:-0.5px; margin-bottom:8px; }
+.ph p { color:var(--text2); font-size:13.5px; line-height:1.65; max-width:700px; }
+.ph code { font-family:var(--mono); font-size:11.5px; color:var(--blue); background:var(--surface3); padding:2px 7px; border-radius:5px; }
+
+/* DIAGRAM AREA */
+.diagram { display:flex; justify-content:center; align-items:flex-start; gap:20px; flex-wrap:wrap; margin:24px 0; }
+
+/* Instruction flow block */
+.flow-block {
+  background:var(--surface2); border:1px solid var(--border); border-radius:14px;
+  padding:24px; min-width:280px; max-width:420px; flex:1;
+}
+.flow-block h3 {
+  font-family:var(--mono); font-size:10px; letter-spacing:1.5px; text-transform:uppercase;
+  color:var(--text3); margin-bottom:16px; display:flex; align-items:center; gap:8px;
+}
+.flow-block h3 .ico { font-size:14px; }
+
+/* Assembly-like instruction lines */
+.inst-line {
+  display:flex; align-items:center; gap:10px;
+  font-family:var(--mono); font-size:12px;
+  padding:8px 12px; margin-bottom:4px; border-radius:8px;
+  border:1px solid transparent; transition:all 0.3s;
+  position:relative;
+}
+.inst-line .addr { color:var(--text3); font-size:10px; min-width:70px; }
+.inst-line .op { color:var(--text); font-weight:600; }
+.inst-line .args { color:var(--text2); font-weight:400; }
+.inst-line.highlight-green { background:var(--green-bg); border-color:var(--green-border); }
+.inst-line.highlight-green .op { color:var(--green); }
+.inst-line.highlight-red { background:var(--red-bg); border-color:var(--red-border); }
+.inst-line.highlight-red .op { color:var(--red); }
+.inst-line.highlight-blue { background:var(--blue-bg); border-color:var(--blue-border); }
+.inst-line.highlight-blue .op { color:var(--blue); }
+.inst-line.highlight-amber { background:var(--amber-bg); border-color:var(--amber-border); }
+.inst-line.highlight-amber .op { color:var(--amber); }
+.inst-line.highlight-purple { background:var(--purple-bg); border-color:rgba(176,140,255,0.18); }
+.inst-line.highlight-purple .op { color:var(--purple); }
+
+.inst-line .annotation {
+  position:absolute; right:10px; font-size:9px; letter-spacing:0.8px;
+  text-transform:uppercase; font-weight:500; padding:2px 8px; border-radius:4px;
+}
+.ann-green { color:var(--green); background:var(--green-bg); }
+.ann-red { color:var(--red); background:var(--red-bg); }
+.ann-amber { color:var(--amber); background:var(--amber-bg); }
+.ann-blue { color:var(--blue); background:var(--blue-bg); }
+.ann-purple { color:var(--purple); background:var(--purple-bg); }
+
+/* Arrow between flow blocks */
+.flow-arrow {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:6px; align-self:center; min-width:50px;
+}
+.flow-arrow .arr-label {
+  font-family:var(--mono); font-size:9px; letter-spacing:1px; text-transform:uppercase;
+  color:var(--text3); writing-mode:vertical-lr; transform:rotate(180deg);
+}
+.flow-arrow svg { opacity:0.5; }
+
+/* Stack visualization */
+.stack-vis {
+  background:var(--surface2); border:1px solid var(--border); border-radius:14px;
+  padding:24px; min-width:220px; flex:0 0 auto;
+}
+.stack-vis h3 {
+  font-family:var(--mono); font-size:10px; letter-spacing:1.5px; text-transform:uppercase;
+  margin-bottom:16px; display:flex; align-items:center; gap:8px;
+}
+.sframe {
+  font-family:var(--mono); font-size:11px;
+  border:1px solid var(--border); border-radius:8px;
+  padding:10px 12px; margin-bottom:5px; background:var(--surface3);
+  transition:all 0.3s;
+}
+.sframe .slabel { font-size:9px; color:var(--text3); letter-spacing:0.5px; margin-bottom:3px; }
+.sframe .sval { font-weight:600; }
+.sframe.s-green { border-color:var(--green-border); }
+.sframe.s-green .sval { color:var(--green); }
+.sframe.s-red { border-color:var(--red-border); background:var(--red-bg); }
+.sframe.s-red .sval { color:var(--red); }
+.sframe.s-blue { border-color:var(--blue-border); }
+.sframe.s-blue .sval { color:var(--blue); }
+
+/* Scenario toggle */
+.scenario-toggle {
+  display:flex; gap:6px; margin-bottom:20px; justify-content:center;
+}
+.scen-btn {
+  font-family:var(--mono); font-size:11px; padding:8px 16px;
+  border:1px solid var(--border); border-radius:8px; background:var(--surface2);
+  color:var(--text3); cursor:pointer; transition:all 0.2s;
+}
+.scen-btn:hover { border-color:var(--text3); color:var(--text2); }
+.scen-btn.active-ok { border-color:var(--green-border); color:var(--green); background:var(--green-bg); }
+.scen-btn.active-bad { border-color:var(--red-border); color:var(--red); background:var(--red-bg); }
+
+/* Result banner */
+.result-banner {
+  display:flex; align-items:center; justify-content:center; gap:10px;
+  font-family:var(--mono); font-size:13px; font-weight:600;
+  padding:12px 24px; border-radius:10px; margin-top:20px;
+}
+.result-banner.ok { color:var(--green); background:var(--green-bg); border:1px solid var(--green-border); }
+.result-banner.fail { color:var(--red); background:var(--red-bg); border:1px solid var(--red-border); animation:shake 0.4s ease; }
+@keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-5px)} 40%{transform:translateX(5px)} 60%{transform:translateX(-3px)} 80%{transform:translateX(3px)} }
+
+/* Config card */
+.config-strip {
+  display:flex; flex-wrap:wrap; gap:10px; margin-top:24px; padding-top:20px; border-top:1px solid var(--border);
+}
+.cfg {
+  font-family:var(--mono); font-size:10.5px; padding:6px 14px;
+  border-radius:8px; border:1px solid var(--border); background:var(--surface3); color:var(--text2);
+}
+.cfg span { color:var(--blue); }
+
+/* Bottom summary grid */
+.summary-grid {
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));
+  gap:14px; margin-top:10px;
+}
+.summary-card {
+  background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px;
+}
+.summary-card h4 {
+  font-family:var(--mono); font-size:10px; letter-spacing:1.5px; text-transform:uppercase;
+  margin-bottom:10px; display:flex; align-items:center; gap:8px;
+}
+.summary-card p { color:var(--text2); font-size:13px; line-height:1.6; }
+.summary-card code { font-family:var(--mono); font-size:11px; color:var(--purple); background:var(--surface3); padding:1px 6px; border-radius:4px; }
+
+/* Responsive */
+@media(max-width:768px) {
+  .flow-arrow { transform:rotate(90deg); min-width:auto; margin:10px 0; }
+  .diagram { flex-direction:column; align-items:stretch; }
+  .flow-block, .stack-vis { min-width:auto; max-width:100%; }
+  .panel { padding:24px 16px; }
+}
+</style>
+</head>
+<body>
+<div class="noise"></div>
+<div class="wrap">
+
+<header>
+  <div class="chip"><span class="dot"></span> RISC-V Security</div>
+  <h1>Control Flow Integrity<br>on RISC-V Linux</h1>
+  <p class="sub">Interactive visual guide to every CFI mechanism available for RISC-V in the Linux kernel — from hardware landing pads to shadow stacks.</p>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="showPanel(0,this)">
+    Zicfilp<span class="edge-badge">Forward Edge</span>
+  </div>
+  <div class="tab" onclick="showPanel(1,this)">
+    Zicfiss<span class="edge-badge">Backward Edge</span>
+  </div>
+  <div class="tab" onclick="showPanel(2,this)">
+    kCFI<span class="edge-badge">Kernel Forward</span>
+  </div>
+  <div class="tab" onclick="showPanel(3,this)">
+    Shadow Call Stack<span class="edge-badge">Software Backward</span>
+  </div>
+  <div class="tab" onclick="showPanel(4,this)">
+    Full Picture<span class="edge-badge">Combined</span>
+  </div>
+</div>
+
+<div class="panel-box">
+
+  <!-- ===================== PANEL 0: Zicfilp ===================== -->
+  <div class="panel active" id="p0">
+    <div class="ph">
+      <div class="badge fwd">▸ Forward-Edge CFI</div>
+      <h2>Zicfilp — Landing Pad Enforcement</h2>
+      <p>Ensures every indirect call or jump lands on a valid <code>lpad</code> instruction. If an attacker redirects an indirect branch to the middle of a function (skipping the landing pad), the CPU raises a <strong>software check exception</strong>.</p>
+    </div>
+
+    <div class="scenario-toggle" id="scen0">
+      <button class="scen-btn active-ok" onclick="setScenario(0,'ok',this)">✓ Legitimate Call</button>
+      <button class="scen-btn" onclick="setScenario(0,'bad',this)">✗ Hijacked Call</button>
+    </div>
+
+    <div id="diag0-ok">
+      <div class="diagram">
+        <div class="flow-block">
+          <h3><span class="ico">◈</span> Caller — main()</h3>
+          <div class="inst-line"><span class="addr">0x10000:</span><span class="op">auipc</span><span class="args">&nbsp;t1, %hi(target)</span></div>
+          <div class="inst-line"><span class="addr">0x10004:</span><span class="op">addi</span><span class="args">&nbsp;t1, t1, %lo(target)</span></div>
+          <div class="inst-line highlight-amber">
+            <span class="addr">0x10008:</span><span class="op">jalr</span><span class="args">&nbsp;ra, t1</span>
+            <span class="annotation ann-amber">indirect call</span>
+          </div>
+        </div>
+        <div class="flow-arrow">
+          <svg width="40" height="24"><path d="M5,12 L30,12" stroke="var(--green)" stroke-width="1.5" fill="none"/><path d="M26,7 L33,12 L26,17" stroke="var(--green)" stroke-width="1.5" fill="none"/></svg>
+        </div>
+        <div class="flow-block">
+          <h3><span class="ico">◈</span> Target — process_data()</h3>
+          <div class="inst-line highlight-green">
+            <span class="addr">0x20000:</span><span class="op">lpad</span><span class="args">&nbsp;0</span>
+            <span class="annotation ann-green">✓ landing pad</span>
+          </div>
+          <div class="inst-line"><span class="addr">0x20004:</span><span class="op">addi</span><span class="args">&nbsp;sp, sp, -32</span></div>
+          <div class="inst-line"><span class="addr">0x20008:</span><span class="op">sd</span><span class="args">&nbsp;ra, 24(sp)</span></div>
+          <div class="inst-line"><span class="addr">0x2000c:</span><span class="op">...</span><span class="args">&nbsp;(function body)</span></div>
+        </div>
+      </div>
+      <div class="result-banner ok">✓ lpad found at target — execution continues</div>
+    </div>
+
+    <div id="diag0-bad" style="display:none">
+      <div class="diagram">
+        <div class="flow-block">
+          <h3><span class="ico">◈</span> Caller — main()</h3>
+          <div class="inst-line"><span class="addr">0x10000:</span><span class="op">auipc</span><span class="args">&nbsp;t1, %hi(target)</span></div>
+          <div class="inst-line highlight-red">
+            <span class="addr">0x10004:</span><span class="op">li</span><span class="args">&nbsp;t1, 0x20008</span>
+            <span class="annotation ann-red">corrupted ptr</span>
+          </div>
+          <div class="inst-line highlight-red">
+            <span class="addr">0x10008:</span><span class="op">jalr</span><span class="args">&nbsp;ra, t1</span>
+            <span class="annotation ann-red">hijacked!</span>
+          </div>
+        </div>
+        <div class="flow-arrow">
+          <svg width="40" height="24"><path d="M5,12 L30,12" stroke="var(--red)" stroke-width="1.5" fill="none" stroke-dasharray="4,3"/><path d="M26,7 L33,12 L26,17" stroke="var(--red)" stroke-width="1.5" fill="none"/></svg>
+        </div>
+        <div class="flow-block">
+          <h3><span class="ico">◈</span> Target — process_data()</h3>
+          <div class="inst-line" style="opacity:0.35"><span class="addr">0x20000:</span><span class="op">lpad</span><span class="args">&nbsp;0</span></div>
+          <div class="inst-line" style="opacity:0.35"><span class="addr">0x20004:</span><span class="op">addi</span><span class="args">&nbsp;sp, sp, -32</span></div>
+          <div class="inst-line highlight-red">
+            <span class="addr">0x20008:</span><span class="op">sd</span><span class="args">&nbsp;ra, 24(sp)</span>
+            <span class="annotation ann-red">✗ not lpad!</span>
+          </div>
+          <div class="inst-line" style="opacity:0.35"><span class="addr">0x2000c:</span><span class="op">...</span><span class="args">&nbsp;(function body)</span></div>
+        </div>
+      </div>
+      <div class="result-banner fail">✗ No lpad at 0x20008 — SOFTWARE CHECK EXCEPTION raised</div>
+    </div>
+
+    <div class="config-strip">
+      <div class="cfg">Extension: <span>Zicfilp</span></div>
+      <div class="cfg">Instruction: <span>lpad</span></div>
+      <div class="cfg">Kernel: <span>CONFIG_RISCV_USER_CFI</span></div>
+      <div class="cfg">Disable: <span>riscv_nousercfi=fcfi</span></div>
+    </div>
+  </div>
+
+  <!-- ===================== PANEL 1: Zicfiss ===================== -->
+  <div class="panel" id="p1">
+    <div class="ph">
+      <div class="badge bwd">◂ Backward-Edge CFI</div>
+      <h2>Zicfiss — Hardware Shadow Stack</h2>
+      <p>Maintains a hardware-protected shadow stack that stores return addresses. On function return, the CPU compares the normal stack's return address against the shadow copy. Uses dedicated <code>sspush</code> / <code>sspop</code> instructions with memory pages only writable by the CPU.</p>
+    </div>
+
+    <div class="scenario-toggle" id="scen1">
+      <button class="scen-btn active-ok" onclick="setScenario(1,'ok',this)">✓ Clean Return</button>
+      <button class="scen-btn" onclick="setScenario(1,'bad',this)">✗ ROP Attack</button>
+    </div>
+
+    <div id="diag1-ok">
+      <div class="diagram">
+        <div class="stack-vis">
+          <h3 style="color:var(--blue)"><span class="ico">▤</span> Normal Stack</h3>
+          <div class="sframe s-blue"><div class="slabel">RETURN ADDR</div><div class="sval" style="color:var(--blue)">0x10040 → main+64</div></div>
+          <div class="sframe"><div class="slabel">SAVED s0</div><div class="sval" style="color:var(--text2)">0x7fffff10</div></div>
+          <div class="sframe"><div class="slabel">LOCAL: buf[64]</div><div class="sval" style="color:var(--text2)">Hello, world...</div></div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;min-width:120px;align-self:center;">
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px 20px;text-align:center;">
+            <div style="font-size:24px;margin-bottom:4px;">⚙</div>
+            <div style="font-family:var(--mono);font-size:9px;letter-spacing:1px;color:var(--text3);">RET COMPARE</div>
+          </div>
+          <svg width="80" height="20"><line x1="5" y1="10" x2="35" y2="10" stroke="var(--blue)" stroke-width="1.2"/><line x1="45" y1="10" x2="75" y2="10" stroke="var(--green)" stroke-width="1.2"/></svg>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--green);background:var(--green-bg);padding:4px 12px;border-radius:6px;border:1px solid var(--green-border)">0x10040 = 0x10040</div>
+        </div>
+
+        <div class="stack-vis">
+          <h3 style="color:var(--green)"><span class="ico">▤</span> Shadow Stack <span style="font-size:13px">🛡</span></h3>
+          <div class="sframe s-green"><div class="slabel">RETURN ADDR (protected)</div><div class="sval" style="color:var(--green)">0x10040 → main+64</div></div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:10px;padding:8px;border:1px dashed var(--border);border-radius:6px;text-align:center;">Hardware write-protected<br>Only sspush/sspop can modify</div>
+        </div>
+      </div>
+      <div class="result-banner ok">✓ Addresses match — return to main+64 allowed</div>
+    </div>
+
+    <div id="diag1-bad" style="display:none">
+      <div class="diagram">
+        <div class="stack-vis">
+          <h3 style="color:var(--red)"><span class="ico">▤</span> Normal Stack ⚠</h3>
+          <div class="sframe s-red"><div class="slabel">RETURN ADDR — OVERWRITTEN</div><div class="sval" style="color:var(--red)">0xDEAD → gadget_chain</div></div>
+          <div class="sframe s-red"><div class="slabel">SAVED s0</div><div class="sval" style="color:var(--red)">AAAAAAAAAAAAA</div></div>
+          <div class="sframe s-red"><div class="slabel">BUFFER OVERFLOW</div><div class="sval" style="color:var(--red)">← attacker payload</div></div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;min-width:120px;align-self:center;">
+          <div style="background:var(--red-bg);border:1px solid var(--red-border);border-radius:12px;padding:16px 20px;text-align:center;">
+            <div style="font-size:24px;margin-bottom:4px;">⚠</div>
+            <div style="font-family:var(--mono);font-size:9px;letter-spacing:1px;color:var(--red);">MISMATCH!</div>
+          </div>
+          <svg width="80" height="20"><line x1="5" y1="10" x2="35" y2="10" stroke="var(--red)" stroke-width="1.2" stroke-dasharray="3,2"/><line x1="45" y1="10" x2="75" y2="10" stroke="var(--green)" stroke-width="1.2"/></svg>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--red);background:var(--red-bg);padding:4px 12px;border-radius:6px;border:1px solid var(--red-border)">0xDEAD ≠ 0x10040</div>
+        </div>
+
+        <div class="stack-vis">
+          <h3 style="color:var(--green)"><span class="ico">▤</span> Shadow Stack <span style="font-size:13px">🛡</span></h3>
+          <div class="sframe s-green"><div class="slabel">RETURN ADDR (untouched)</div><div class="sval" style="color:var(--green)">0x10040 → main+64</div></div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:10px;padding:8px;border:1px dashed var(--border);border-radius:6px;text-align:center;">Overflow cannot reach here<br>Hardware enforced isolation</div>
+        </div>
+      </div>
+      <div class="result-banner fail">✗ Mismatch detected — SOFTWARE CHECK EXCEPTION — ROP blocked</div>
+    </div>
+
+    <div class="config-strip">
+      <div class="cfg">Extension: <span>Zicfiss</span></div>
+      <div class="cfg">Instructions: <span>sspush / sspop / ssamoswap</span></div>
+      <div class="cfg">Kernel: <span>CONFIG_RISCV_USER_CFI</span></div>
+      <div class="cfg">Disable: <span>riscv_nousercfi=bcfi</span></div>
+    </div>
+  </div>
+
+  <!-- ===================== PANEL 2: kCFI ===================== -->
+  <div class="panel" id="p2">
+    <div class="ph">
+      <div class="badge kern">⬢ Kernel Forward-Edge</div>
+      <h2>kCFI — Kernel Type-Based CFI</h2>
+      <p>Clang's kernel CFI inserts a <strong>type hash</strong> before each function and checks it at every indirect call site. If the function pointer has been corrupted to point at a function with a different signature, the hash won't match. Requires <code>clang -fsanitize=kcfi</code>.</p>
+    </div>
+
+    <div class="scenario-toggle" id="scen2">
+      <button class="scen-btn active-ok" onclick="setScenario(2,'ok',this)">✓ Correct Type</button>
+      <button class="scen-btn" onclick="setScenario(2,'bad',this)">✗ Type Confusion</button>
+    </div>
+
+    <div id="diag2-ok">
+      <div class="diagram">
+        <div class="flow-block" style="max-width:480px;">
+          <h3><span class="ico">◈</span> Indirect call via function pointer</h3>
+          <div class="inst-line"><span class="addr">// kernel</span><span class="op">callback</span><span class="args">&nbsp;= ops->read_handler;</span></div>
+          <div class="inst-line highlight-purple">
+            <span class="addr">0x80200a:</span><span class="op">lw</span><span class="args">&nbsp;t0, -4(t1)</span>
+            <span class="annotation ann-purple">load hash</span>
+          </div>
+          <div class="inst-line highlight-purple">
+            <span class="addr">0x80200e:</span><span class="op">li</span><span class="args">&nbsp;t2, 0xa3f7c012</span>
+            <span class="annotation ann-purple">expected hash</span>
+          </div>
+          <div class="inst-line highlight-green">
+            <span class="addr">0x802016:</span><span class="op">beq</span><span class="args">&nbsp;t0, t2, +8</span>
+            <span class="annotation ann-green">✓ match!</span>
+          </div>
+          <div class="inst-line" style="opacity:0.35"><span class="addr">0x80201a:</span><span class="op">ebreak</span><span class="args">&nbsp;# would trap</span></div>
+          <div class="inst-line highlight-amber"><span class="addr">0x80201e:</span><span class="op">jalr</span><span class="args">&nbsp;ra, t1</span><span class="annotation ann-amber">call target</span></div>
+        </div>
+        <div class="flow-arrow">
+          <svg width="40" height="24"><path d="M5,12 L30,12" stroke="var(--green)" stroke-width="1.5" fill="none"/><path d="M26,7 L33,12 L26,17" stroke="var(--green)" stroke-width="1.5" fill="none"/></svg>
+        </div>
+        <div class="flow-block">
+          <h3><span class="ico">◈</span> Target — read_handler()</h3>
+          <div class="inst-line highlight-purple">
+            <span class="addr">-0x4:</span><span class="op">.word</span><span class="args">&nbsp;0xa3f7c012</span>
+            <span class="annotation ann-purple">type hash</span>
+          </div>
+          <div class="inst-line highlight-green">
+            <span class="addr">0x30000:</span><span class="op">addi</span><span class="args">&nbsp;sp, sp, -16</span>
+            <span class="annotation ann-green">entry</span>
+          </div>
+          <div class="inst-line"><span class="addr">0x30004:</span><span class="op">...</span><span class="args">&nbsp;(function body)</span></div>
+        </div>
+      </div>
+      <div class="result-banner ok">✓ Type hash 0xa3f7c012 matches — call proceeds</div>
+    </div>
+
+    <div id="diag2-bad" style="display:none">
+      <div class="diagram">
+        <div class="flow-block" style="max-width:480px;">
+          <h3><span class="ico">◈</span> Corrupted function pointer</h3>
+          <div class="inst-line highlight-red"><span class="addr">// kernel</span><span class="op">callback</span><span class="args">&nbsp;= ATTACKER_GADGET;</span><span class="annotation ann-red">corrupted</span></div>
+          <div class="inst-line highlight-purple">
+            <span class="addr">0x80200a:</span><span class="op">lw</span><span class="args">&nbsp;t0, -4(t1)</span>
+            <span class="annotation ann-purple">load hash</span>
+          </div>
+          <div class="inst-line highlight-purple">
+            <span class="addr">0x80200e:</span><span class="op">li</span><span class="args">&nbsp;t2, 0xa3f7c012</span>
+            <span class="annotation ann-purple">expected hash</span>
+          </div>
+          <div class="inst-line highlight-red">
+            <span class="addr">0x802016:</span><span class="op">bne</span><span class="args">&nbsp;t0, t2 → trap</span>
+            <span class="annotation ann-red">✗ mismatch</span>
+          </div>
+          <div class="inst-line highlight-red"><span class="addr">0x80201a:</span><span class="op">ebreak</span><span class="args">&nbsp;# TRAP!</span><span class="annotation ann-red">kernel panic</span></div>
+        </div>
+        <div class="flow-arrow">
+          <svg width="40" height="24"><path d="M5,12 L30,12" stroke="var(--red)" stroke-width="1.5" fill="none" stroke-dasharray="4,3"/><path d="M26,7 L33,12 L26,17" stroke="var(--red)" stroke-width="1.5" fill="none"/></svg>
+        </div>
+        <div class="flow-block">
+          <h3><span class="ico">◈</span> Attacker target — gadget()</h3>
+          <div class="inst-line highlight-red">
+            <span class="addr">-0x4:</span><span class="op">.word</span><span class="args">&nbsp;0x00000000</span>
+            <span class="annotation ann-red">wrong hash</span>
+          </div>
+          <div class="inst-line" style="opacity:0.25"><span class="addr">0xDEAD0:</span><span class="op">ld</span><span class="args">&nbsp;a0, 0(sp)</span></div>
+          <div class="inst-line" style="opacity:0.25"><span class="addr">0xDEAD4:</span><span class="op">jalr</span><span class="args">&nbsp;zero, a0</span></div>
+        </div>
+      </div>
+      <div class="result-banner fail">✗ Hash 0x00000000 ≠ 0xa3f7c012 — TRAP — type confusion blocked</div>
+    </div>
+
+    <div class="config-strip">
+      <div class="cfg">Compiler: <span>Clang -fsanitize=kcfi</span></div>
+      <div class="cfg">Kernel: <span>CONFIG_CFI_CLANG</span></div>
+      <div class="cfg">Scope: <span>Kernel-space only</span></div>
+      <div class="cfg">Arch: <span>RISC-V (since ~6.x)</span></div>
+    </div>
+  </div>
+
+  <!-- ===================== PANEL 3: Shadow Call Stack ===================== -->
+  <div class="panel" id="p3">
+    <div class="ph">
+      <div class="badge bwd">◂ Software Backward-Edge</div>
+      <h2>Shadow Call Stack (SCS)</h2>
+      <p>A <strong>software-based</strong> backward-edge defense. The compiler reserves a dedicated register (<code>gp</code> or similar on RISC-V) pointing to a separate stack that holds only return addresses. On every call, the return address is stored in both stacks; on return, the shadow copy is used. Unlike Zicfiss, this doesn't need hardware extensions but is weaker — if an attacker leaks the shadow stack pointer, they can tamper with it.</p>
+    </div>
+
+    <div class="scenario-toggle" id="scen3">
+      <button class="scen-btn active-ok" onclick="setScenario(3,'ok',this)">✓ Normal Flow</button>
+      <button class="scen-btn" onclick="setScenario(3,'bad',this)">⚠ Limitation</button>
+    </div>
+
+    <div id="diag3-ok">
+      <div class="diagram">
+        <div class="flow-block" style="max-width:500px;">
+          <h3><span class="ico">◈</span> Function prologue / epilogue (compiler-generated)</h3>
+          <div class="inst-line" style="opacity:0.5;font-size:11px;color:var(--text3);border:none;padding:4px 12px;">// ---- Prologue ----</div>
+          <div class="inst-line highlight-green">
+            <span class="addr">0x1000:</span><span class="op">sd</span><span class="args">&nbsp;ra, 0(x3)</span>
+            <span class="annotation ann-green">push to SCS</span>
+          </div>
+          <div class="inst-line">
+            <span class="addr">0x1004:</span><span class="op">addi</span><span class="args">&nbsp;x3, x3, 8</span>
+          </div>
+          <div class="inst-line"><span class="addr">0x1008:</span><span class="op">sd</span><span class="args">&nbsp;ra, 0(sp)</span></div>
+          <div class="inst-line"><span class="addr">0x100c:</span><span class="op">...</span><span class="args">&nbsp;(function body)</span></div>
+          <div class="inst-line" style="opacity:0.5;font-size:11px;color:var(--text3);border:none;padding:4px 12px;">// ---- Epilogue ----</div>
+          <div class="inst-line highlight-green">
+            <span class="addr">0x1040:</span><span class="op">addi</span><span class="args">&nbsp;x3, x3, -8</span>
+          </div>
+          <div class="inst-line highlight-green">
+            <span class="addr">0x1044:</span><span class="op">ld</span><span class="args">&nbsp;ra, 0(x3)</span>
+            <span class="annotation ann-green">pop from SCS</span>
+          </div>
+          <div class="inst-line highlight-amber">
+            <span class="addr">0x1048:</span><span class="op">ret</span><span class="args"></span>
+            <span class="annotation ann-amber">uses SCS copy</span>
+          </div>
+        </div>
+
+        <div class="stack-vis" style="align-self:center;">
+          <h3 style="color:var(--green)"><span class="ico">▤</span> Shadow Call Stack</h3>
+          <div class="sframe s-green"><div class="slabel">x3 → SCS[2]</div><div class="sval" style="color:var(--green)">0x10040 (current)</div></div>
+          <div class="sframe s-green"><div class="slabel">SCS[1]</div><div class="sval" style="color:var(--green)">0x10820</div></div>
+          <div class="sframe s-green"><div class="slabel">SCS[0]</div><div class="sval" style="color:var(--green)">0x10100</div></div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:10px;padding:8px;border:1px dashed var(--border);border-radius:6px;text-align:center;">Separate memory region<br>pointed to by dedicated register</div>
+        </div>
+      </div>
+      <div class="result-banner ok">✓ Return address from shadow stack — buffer overflow on main stack is irrelevant</div>
+    </div>
+
+    <div id="diag3-bad" style="display:none">
+      <div class="diagram">
+        <div class="flow-block" style="max-width:500px;">
+          <h3><span class="ico">⚠</span> Limitation: register leak</h3>
+          <div class="inst-line highlight-red">
+            <span class="addr">// If attacker can read x3 register...</span><span class="op"></span>
+          </div>
+          <div class="inst-line highlight-red">
+            <span class="addr">Step 1:</span><span class="op">Leak</span><span class="args">&nbsp;x3 value (SCS pointer)</span>
+            <span class="annotation ann-red">info leak</span>
+          </div>
+          <div class="inst-line highlight-red">
+            <span class="addr">Step 2:</span><span class="op">Write</span><span class="args">&nbsp;to SCS memory region</span>
+            <span class="annotation ann-red">arb write</span>
+          </div>
+          <div class="inst-line highlight-red">
+            <span class="addr">Step 3:</span><span class="op">Overwrite</span><span class="args">&nbsp;shadow return addr</span>
+            <span class="annotation ann-red">bypassed</span>
+          </div>
+          <div style="margin-top:16px;padding:14px;background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:10px;font-size:13px;color:var(--amber);">
+            <strong>This is why Zicfiss is preferred:</strong> hardware shadow stacks use special page protections that can't be written by normal store instructions, even if the attacker knows the address.
+          </div>
+        </div>
+
+        <div class="stack-vis" style="align-self:center;">
+          <h3 style="color:var(--amber)"><span class="ico">▤</span> SCS vs Zicfiss</h3>
+          <div class="sframe" style="border-color:var(--amber-border)"><div class="slabel">SOFTWARE SCS</div><div class="sval" style="color:var(--amber)">Register-guarded only</div></div>
+          <div class="sframe s-green"><div class="slabel">HARDWARE Zicfiss</div><div class="sval" style="color:var(--green)">Page-table protected</div></div>
+          <div style="margin-top:12px;font-family:var(--mono);font-size:10px;color:var(--text3);line-height:1.8;">
+            SCS: Moderate security<br>
+            Zicfiss: Strong security
+          </div>
+        </div>
+      </div>
+      <div class="result-banner fail" style="background:var(--amber-bg);border-color:var(--amber-border);color:var(--amber);">⚠ SCS can be bypassed with info leak + arbitrary write — prefer hardware Zicfiss when available</div>
+    </div>
+
+    <div class="config-strip">
+      <div class="cfg">Mechanism: <span>Software (compiler)</span></div>
+      <div class="cfg">Kernel: <span>CONFIG_SHADOW_CALL_STACK</span></div>
+      <div class="cfg">Compiler: <span>Clang -fsanitize=shadow-call-stack</span></div>
+      <div class="cfg">Weakness: <span>Register leak</span></div>
+    </div>
+  </div>
+
+  <!-- ===================== PANEL 4: Full Picture ===================== -->
+  <div class="panel" id="p4">
+    <div class="ph">
+      <div class="badge combo">◆ Combined Defense</div>
+      <h2>The Full Picture — Layered CFI on RISC-V</h2>
+      <p>Maximum protection comes from layering multiple CFI mechanisms together. Here's how they cover different attack surfaces across a function's lifecycle.</p>
+    </div>
+
+    <div class="diagram" style="flex-direction:column;align-items:center;gap:0;">
+
+      <!-- Timeline -->
+      <div style="width:100%;max-width:800px;">
+
+        <!-- Phase 1: Indirect Call -->
+        <div style="display:flex;gap:16px;margin-bottom:6px;align-items:stretch;">
+          <div style="min-width:100px;text-align:right;padding-top:14px;">
+            <div style="font-family:var(--mono);font-size:9px;letter-spacing:1px;color:var(--amber);text-transform:uppercase;">Indirect Call</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:4px;">jalr ra, t1</div>
+          </div>
+          <div style="width:3px;background:linear-gradient(180deg,var(--amber),var(--amber));border-radius:2px;flex-shrink:0;"></div>
+          <div style="flex:1;display:flex;gap:8px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:200px;background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:10px;padding:14px 16px;">
+              <div style="font-family:var(--mono);font-size:10px;letter-spacing:1px;color:var(--amber);margin-bottom:6px;">ZICFILP — Landing Pad</div>
+              <div style="font-size:12px;color:var(--text2);line-height:1.5;">Target must begin with <code style="font-family:var(--mono);color:var(--amber);font-size:11px;">lpad</code>. Blocks jumps to arbitrary code locations.</div>
+            </div>
+            <div style="flex:1;min-width:200px;background:var(--purple-bg);border:1px solid rgba(176,140,255,0.18);border-radius:10px;padding:14px 16px;">
+              <div style="font-family:var(--mono);font-size:10px;letter-spacing:1px;color:var(--purple);margin-bottom:6px;">kCFI — Type Hash</div>
+              <div style="font-size:12px;color:var(--text2);line-height:1.5;">Verifies function signature hash before call. Blocks type-confusion attacks in kernel.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Phase 2: Function Entry -->
+        <div style="display:flex;gap:16px;margin-bottom:6px;align-items:stretch;">
+          <div style="min-width:100px;text-align:right;padding-top:14px;">
+            <div style="font-family:var(--mono);font-size:9px;letter-spacing:1px;color:var(--blue);text-transform:uppercase;">Function Entry</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:4px;">prologue</div>
+          </div>
+          <div style="width:3px;background:var(--blue);border-radius:2px;flex-shrink:0;"></div>
+          <div style="flex:1;display:flex;gap:8px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:200px;background:var(--green-bg);border:1px solid var(--green-border);border-radius:10px;padding:14px 16px;">
+              <div style="font-family:var(--mono);font-size:10px;letter-spacing:1px;color:var(--green);margin-bottom:6px;">ZICFISS — sspush</div>
+              <div style="font-size:12px;color:var(--text2);line-height:1.5;">Return address pushed to hardware shadow stack. Protected memory — no normal stores allowed.</div>
+            </div>
+            <div style="flex:1;min-width:200px;background:var(--cyan-bg);border:1px solid rgba(54,214,214,0.18);border-radius:10px;padding:14px 16px;">
+              <div style="font-family:var(--mono);font-size:10px;letter-spacing:1px;color:var(--cyan);margin-bottom:6px;">SCS — Software Push</div>
+              <div style="font-size:12px;color:var(--text2);line-height:1.5;">Return address also stored via dedicated register. Fallback when no Zicfiss hardware.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Phase 3: Execution -->
+        <div style="display:flex;gap:16px;margin-bottom:6px;align-items:stretch;">
+          <div style="min-width:100px;text-align:right;padding-top:14px;">
+            <div style="font-family:var(--mono);font-size:9px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;">Execution</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:4px;">function body</div>
+          </div>
+          <div style="width:3px;background:var(--text3);border-radius:2px;flex-shrink:0;opacity:0.4;"></div>
+          <div style="flex:1;padding:14px 16px;border:1px dashed var(--border);border-radius:10px;">
+            <div style="font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:0.5px;">Normal execution... potential buffer overflow here corrupts the normal stack but cannot reach shadow stack or alter landing pads.</div>
+          </div>
+        </div>
+
+        <!-- Phase 4: Return -->
+        <div style="display:flex;gap:16px;align-items:stretch;">
+          <div style="min-width:100px;text-align:right;padding-top:14px;">
+            <div style="font-family:var(--mono);font-size:9px;letter-spacing:1px;color:var(--green);text-transform:uppercase;">Return</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:4px;">ret</div>
+          </div>
+          <div style="width:3px;background:linear-gradient(180deg,var(--green),var(--green2));border-radius:2px;flex-shrink:0;"></div>
+          <div style="flex:1;display:flex;gap:8px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:200px;background:var(--green-bg);border:1px solid var(--green-border);border-radius:10px;padding:14px 16px;">
+              <div style="font-family:var(--mono);font-size:10px;letter-spacing:1px;color:var(--green);margin-bottom:6px;">ZICFISS — sspop + compare</div>
+              <div style="font-size:12px;color:var(--text2);line-height:1.5;">CPU compares shadow return addr with stack. Mismatch → exception. Blocks all ROP.</div>
+            </div>
+            <div style="flex:1;min-width:200px;background:var(--cyan-bg);border:1px solid rgba(54,214,214,0.18);border-radius:10px;padding:14px 16px;">
+              <div style="font-family:var(--mono);font-size:10px;letter-spacing:1px;color:var(--cyan);margin-bottom:6px;">SCS — Use shadow copy</div>
+              <div style="font-size:12px;color:var(--text2);line-height:1.5;">Returns using the SCS copy, ignoring the potentially corrupted normal stack.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Attack coverage matrix -->
+    <div style="margin-top:32px;padding-top:24px;border-top:1px solid var(--border);">
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:16px;text-align:center;">Attack Coverage Matrix</div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border);">
+              <th style="text-align:left;padding:10px 12px;color:var(--text2);font-weight:500;">Attack Type</th>
+              <th style="padding:10px 12px;color:var(--amber);">Zicfilp</th>
+              <th style="padding:10px 12px;color:var(--green);">Zicfiss</th>
+              <th style="padding:10px 12px;color:var(--purple);">kCFI</th>
+              <th style="padding:10px 12px;color:var(--cyan);">SCS</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:10px 12px;color:var(--text2);">ROP (Return-Oriented)</td>
+              <td style="text-align:center;padding:10px;">—</td>
+              <td style="text-align:center;padding:10px;color:var(--green);">●●●</td>
+              <td style="text-align:center;padding:10px;">—</td>
+              <td style="text-align:center;padding:10px;color:var(--cyan);">●●○</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:10px 12px;color:var(--text2);">JOP (Jump-Oriented)</td>
+              <td style="text-align:center;padding:10px;color:var(--amber);">●●●</td>
+              <td style="text-align:center;padding:10px;">—</td>
+              <td style="text-align:center;padding:10px;color:var(--purple);">●●○</td>
+              <td style="text-align:center;padding:10px;">—</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:10px 12px;color:var(--text2);">Type Confusion</td>
+              <td style="text-align:center;padding:10px;">●○○</td>
+              <td style="text-align:center;padding:10px;">—</td>
+              <td style="text-align:center;padding:10px;color:var(--purple);">●●●</td>
+              <td style="text-align:center;padding:10px;">—</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:10px 12px;color:var(--text2);">Stack Buffer Overflow</td>
+              <td style="text-align:center;padding:10px;">—</td>
+              <td style="text-align:center;padding:10px;color:var(--green);">●●●</td>
+              <td style="text-align:center;padding:10px;">—</td>
+              <td style="text-align:center;padding:10px;color:var(--cyan);">●●●</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 12px;color:var(--text2);">Arbitrary Code Exec</td>
+              <td style="text-align:center;padding:10px;color:var(--amber);">●●○</td>
+              <td style="text-align:center;padding:10px;color:var(--green);">●●○</td>
+              <td style="text-align:center;padding:10px;color:var(--purple);">●●○</td>
+              <td style="text-align:center;padding:10px;color:var(--cyan);">●○○</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:10px;text-align:center;">●●● Strong &nbsp; ●●○ Moderate &nbsp; ●○○ Partial &nbsp; — Not applicable</div>
+    </div>
+
+    <div class="config-strip">
+      <div class="cfg">Best combo: <span>Zicfilp + Zicfiss + kCFI</span></div>
+      <div class="cfg">Fallback: <span>SCS when no Zicfiss HW</span></div>
+      <div class="cfg">Kernel: <span>Linux 7.0+</span></div>
+    </div>
+  </div>
+
+</div><!-- panel-box -->
+
+<!-- Bottom summary -->
+<div class="summary-grid">
+  <div class="summary-card">
+    <h4 style="color:var(--amber);">◈ Forward Edge</h4>
+    <p>Zicfilp landing pads and kCFI type hashes work together to ensure indirect calls and jumps only reach legitimate, correctly-typed function entry points.</p>
+  </div>
+  <div class="summary-card">
+    <h4 style="color:var(--green);">◈ Backward Edge</h4>
+    <p>Zicfiss hardware shadow stacks provide the strongest return-address protection. SCS via <code>CONFIG_SHADOW_CALL_STACK</code> is the software fallback for CPUs without Zicfiss.</p>
+  </div>
+  <div class="summary-card">
+    <h4 style="color:var(--blue);">◈ Kernel vs User</h4>
+    <p>kCFI protects kernel-space indirect calls. Zicfilp and Zicfiss protect user-space programs. <code>CONFIG_RISCV_USER_CFI</code> enables both user-space extensions together.</p>
+  </div>
+  <div class="summary-card">
+    <h4 style="color:var(--purple);">◈ Toolchain</h4>
+    <p>kCFI and SCS require <code>Clang</code>. Zicfilp/Zicfiss need hardware support plus a toolchain that emits <code>lpad</code> / <code>sspush</code> instructions. GCC support is in progress.</p>
+  </div>
+</div>
+
+</div><!-- wrap -->
+
+<script>
+function showPanel(idx, el) {
+  document.querySelectorAll('.panel').forEach((p,i) => p.classList.toggle('active', i===idx));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function setScenario(panel, type, btn) {
+  const ok = document.getElementById(`diag${panel}-ok`);
+  const bad = document.getElementById(`diag${panel}-bad`);
+  const btns = document.querySelectorAll(`#scen${panel} .scen-btn`);
+  btns.forEach(b => { b.className = 'scen-btn'; });
+  if (type === 'ok') {
+    ok.style.display = 'block';
+    bad.style.display = 'none';
+    btn.classList.add('active-ok');
+  } else {
+    ok.style.display = 'none';
+    bad.style.display = 'block';
+    btn.classList.add('active-bad');
+  }
+}
+
+// Keyboard nav
+document.addEventListener('keydown', e => {
+  const panels = document.querySelectorAll('.tab');
+  const active = document.querySelector('.tab.active');
+  const idx = [...panels].indexOf(active);
+  if (e.key === 'ArrowRight' && idx < panels.length - 1) { showPanel(idx+1, panels[idx+1]); }
+  if (e.key === 'ArrowLeft' && idx > 0) { showPanel(idx-1, panels[idx-1]); }
+});
+</script>
+</body>
+</html>

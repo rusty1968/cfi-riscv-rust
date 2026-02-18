@@ -1,0 +1,20 @@
+# Build artifacts
+/target/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS metadata
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
+
+# Rust tooling
+**/*.rs.bk
+
+# Claude Code
+.claude/
