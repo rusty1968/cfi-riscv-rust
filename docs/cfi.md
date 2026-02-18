@@ -482,9 +482,10 @@ pub unsafe extern "C" fn protected_function(x: u32) -> u32 {
 
 ## 7. Software Shadow Stack Fallback <a name="7-software-shadow-stack"></a>
 
-When your hardware doesn't have Zicfiss (or you want defense-in-depth), you
-can implement a software shadow stack. This is what `CONFIG_SHADOW_CALL_STACK`
-does in the Linux kernel, adapted for bare-metal Rust.
+When your hardware doesn't have Zicfiss, you can implement a software shadow
+stack as a fallback. This is what `CONFIG_SHADOW_CALL_STACK` does in the Linux
+kernel, adapted for bare-metal Rust. On Zicfiss-capable cores the hardware
+shadow stack is strictly stronger and the software version is redundant.
 
 ### Design
 

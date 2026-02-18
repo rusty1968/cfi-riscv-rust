@@ -1091,8 +1091,8 @@ ret
 
   <div style="margin-top:20px;">
     <div class="analogy">
-      <div class="label">Dual Shadow Stack — Defense in Depth</div>
-      <p>The system runs <strong>both</strong> a hardware shadow stack (Zicfiss via <code class="green">ssp</code> CSR) and a software shadow stack (via the <code class="green">gp</code> register). On Zicfiss-capable cores, both check every return. On cores without Zicfiss, the software stack still catches ROP attacks. Two independent verifications — an attacker must defeat both.</p>
+      <div class="label">Software Shadow Stack — Fallback for non-Zicfiss Cores</div>
+      <p>The binary includes <strong>both</strong> Zicfiss instructions and a software shadow stack (via the <code class="green">gp</code> register). Since Zicfiss instructions execute as NOPs on non-CFI cores, the software stack provides the sole backward-edge protection there. On Zicfiss-capable cores, the hardware shadow stack is strictly stronger — only <code class="green">sspush</code>/<code class="green">sspopchk</code> can write to SS-attributed pages, making the software check redundant. A production build would detect Zicfiss at boot and skip the software path.</p>
     </div>
   </div>
 </div>

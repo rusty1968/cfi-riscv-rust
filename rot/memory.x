@@ -20,8 +20,8 @@ MEMORY
      * PMP: M=RW, U=none.  Never accessible from U-mode. */
     M_RAM       : ORIGIN = 0x80010000, LENGTH = 32K
 
-    /* M-mode shadow stack (hardware Zicfiss + software fallback).
-     * PMP: M=RW, U=none.  Separate from M_RAM for defense-in-depth. */
+    /* M-mode shadow stack (hardware Zicfiss).
+     * PMP: M=RW, U=none.  Separate from M_RAM for spatial isolation. */
     M_SHADOW    : ORIGIN = 0x80018000, LENGTH = 4K
 
     /* M-mode software shadow stack.
@@ -47,7 +47,7 @@ MEMORY
      * can write). With PMP-only: M=RW, U=RW but spatially isolated. */
     U_SHADOW    : ORIGIN = 0x80058000, LENGTH = 4K
 
-    /* U-mode software shadow stack (belt-and-suspenders fallback).
+    /* U-mode software shadow stack (fallback for cores without Zicfiss).
      * PMP: M=RW, U=RW. */
     U_SW_SHADOW : ORIGIN = 0x80059000, LENGTH = 4K
 

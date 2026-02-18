@@ -845,7 +845,7 @@ pub extern "C" fn rot_main() -> ! {
     uart_puts("── Phase 5: U-Mode Launch ──────────────────────────────────\r\n");
     uart_puts("[LAUNCH] Security state summary:\r\n");
     uart_puts("  - Hardware CFI: Zicfilp (landing pads) + Zicfiss (shadow stack)\r\n");
-    uart_puts("  - Software CFI: Dual shadow stack (gp-based fallback)\r\n");
+    uart_puts("  - Software CFI: gp-based shadow stack (fallback for non-Zicfiss)\r\n");
     uart_puts("  - PMP: 8 entries isolating M-mode / U-mode regions\r\n");
     uart_puts("  - Privilege: Dropping from M-mode -> U-mode via mret\r\n");
     uart_puts("  - W^X: U-mode code is RX, U-mode data is RW (no RWX)\r\n");

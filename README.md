@@ -7,7 +7,7 @@ A `#![no_std]` Rust project demonstrating **DIY Control Flow Integrity** on RV32
 - **Software shadow stack** — always-available fallback using the `gp` register
 - **DIY KCFI** — type-based indirect call verification (type hash at `[fn-4]`, checked before every indirect call)
 
-All hardware CFI instructions are encoded in the **Zimop/Zcmop** (May-Be-Operations) space, so they execute as NOPs on hardware that lacks CFI support. This gives you defense-in-depth: hardware enforcement when available, graceful degradation when not.
+All hardware CFI instructions are encoded in the **Zimop/Zcmop** (May-Be-Operations) space, so they execute as NOPs on hardware that lacks CFI support. This gives you graceful degradation: hardware enforcement when available, software fallback when not.
 
 ## What it demonstrates
 
