@@ -5,3 +5,7 @@ version = 4
 [[package]]
 name = "riscv-cfi-baremetal"
 version = "0.1.0"
+
+[[package]]
+name = "riscv-rot-cfi"
+version = "0.1.0"

@@ -3,11 +3,8 @@ target = "rv32imac-cfi-none-elf.json"
 
 [target.'cfg(target_arch = "riscv32")']
 runner = "qemu-system-riscv32 -machine virt -nographic -bios none -kernel"
-rustflags = [
-    "-C", "link-arg=-Tmemory.x",
-    "-C", "link-arg=-Tlink.x",
-    "-C", "link-arg=--no-relax",
-]
+# Linker flags (-Tmemory.x, -Tlink.x, --no-relax) are emitted per-crate
+# from each crate's build.rs, since each crate has its own linker scripts.
 
 [unstable]
 build-std = ["core"]

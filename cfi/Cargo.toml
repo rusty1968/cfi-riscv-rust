@@ -1,0 +1,7 @@
+[package]
+name = "riscv-cfi-baremetal"
+version = "0.1.0"
+edition = "2021"
+description = "RISC-V bare-metal CFI demo — Zicfilp, Zicfiss, software shadow stack, DIY kCFI"
+
+[dependencies]

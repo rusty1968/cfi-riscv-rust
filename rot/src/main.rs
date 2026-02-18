@@ -601,6 +601,9 @@ fn launch_umode() {
 /// U-mode ecall wrappers.
 ///
 /// These run in U-mode and use `ecall` to request services from M-mode.
+/// Currently unused because `_u_entry` issues ecalls directly in assembly;
+/// retained as the Rust-level API for future U-mode applications.
+#[allow(dead_code)]
 mod umode_syscalls {
     /// Print a single character via M-mode UART service.
     #[inline(always)]
@@ -691,6 +694,7 @@ pub unsafe extern "C" fn u_double(x: u32) -> u32 {
 
 /// U-mode dispatch table — function pointers with landing pads.
 #[repr(C)]
+#[allow(dead_code)]
 struct UDispatch {
     handler: unsafe extern "C" fn(u32) -> u32,
 }

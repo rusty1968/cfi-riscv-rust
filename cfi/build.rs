@@ -1,4 +1,5 @@
 fn main() {
+    // Tell cargo to re-run if linker scripts change
     println!("cargo:rerun-if-changed=memory.x");
     println!("cargo:rerun-if-changed=link.x");
     println!("cargo:rerun-if-changed=build.rs");

@@ -1,9 +1,6 @@
-[package]
-name = "riscv-cfi-baremetal"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
+[workspace]
+members = ["cfi", "rot"]
+resolver = "2"
 
 [profile.release]
 opt-level = "s"
