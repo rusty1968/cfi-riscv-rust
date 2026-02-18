@@ -1,0 +1,13 @@
+[package]
+name = "riscv-rot-cfi"
+version = "0.1.0"
+edition = "2021"
+description = "RISC-V Root of Trust with hardware CFI (Zicfilp + Zicfiss) and PMP isolation"
+
+[dependencies]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+debug = true

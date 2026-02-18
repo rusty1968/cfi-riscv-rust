@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RISC-V Root of Trust Architecture — CFI + PMP Privilege Separation</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700;800&family=Nunito:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #faf8f4;
+  --surface: #ffffff;
+  --surface2: #f3f0ea;
+  --border: #e4dfd6;
+  --border2: #d1cbc0;
+  --text: #2c2418;
+  --text2: #6b5e4d;
+  --text3: #9c8e7a;
+  --green: #2a9d6e;
+  --green-light: #e8f6ef;
+  --green-border: #b4dfc9;
+  --red: #c9453a;
+  --red-light: #fceae8;
+  --red-border: #edb8b3;
+  --blue: #3574c4;
+  --blue-light: #e8f0fa;
+  --blue-border: #a8c8e8;
+  --amber: #c48a1a;
+  --amber-light: #fdf3dc;
+  --amber-border: #e8d5a0;
+  --purple: #7c52b8;
+  --purple-light: #f1ebfa;
+  --purple-border: #c8b4e0;
+  --serif: 'Fraunces', Georgia, serif;
+  --sans: 'Nunito', sans-serif;
+  --mono: 'IBM Plex Mono', monospace;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:var(--sans); line-height:1.7; }
+
+.page { max-width:900px; margin:0 auto; padding:48px 24px 80px; }
+
+/* ─── Hero ─── */
+.hero { text-align:center; margin-bottom:56px; }
+.hero .eyebrow {
+  font-family:var(--mono); font-size:11px; letter-spacing:2px; text-transform:uppercase;
+  color:var(--green); margin-bottom:16px;
+}
+.hero h1 {
+  font-family:var(--serif); font-size:clamp(28px,5vw,42px); font-weight:800;
+  line-height:1.15; letter-spacing:-0.5px; color:var(--text); margin-bottom:16px;
+}
+.hero h1 em { font-style:italic; color:var(--green); }
+.hero .intro {
+  font-size:16px; color:var(--text2); max-width:600px; margin:0 auto; line-height:1.75;
+}
+
+/* ─── Section ─── */
+.arch-section {
+  margin-bottom:52px;
+  padding-bottom:52px;
+  border-bottom:1px solid var(--border);
+}
+.arch-section:last-of-type { border-bottom:none; }
+
+.section-num {
+  font-family:var(--mono); font-size:11px; letter-spacing:2px; text-transform:uppercase;
+  color:var(--text3); margin-bottom:8px;
+}
+
+.arch-section h2 {
+  font-family:var(--serif); font-size:26px; font-weight:700; margin-bottom:6px; letter-spacing:-0.3px;
+}
+.arch-section h2 .emoji { font-style:normal; }
+.arch-section .subtitle {
+  font-size:14px; color:var(--text3); margin-bottom:20px; line-height:1.6;
+}
+
+.arch-section .story {
+  font-size:15.5px; color:var(--text2); margin-bottom:24px; line-height:1.8;
+}
+.arch-section .story strong { color:var(--text); font-weight:700; }
+
+/* ─── Analogy box ─── */
+.analogy {
+  background:var(--amber-light); border:1px solid var(--amber-border); border-radius:14px;
+  padding:22px 26px; margin-bottom:24px; position:relative;
+}
+.analogy::before {
+  content:'💡'; position:absolute; top:-12px; left:20px;
+  font-size:20px; background:var(--amber-light); padding:0 6px;
+}
+.analogy .label {
+  font-family:var(--mono); font-size:10px; letter-spacing:1.5px; text-transform:uppercase;
+  color:var(--amber); margin-bottom:8px; font-weight:600;
+}
+.analogy p { font-size:14.5px; color:var(--text); line-height:1.75; }
+
+/* ─── Defense box ─── */
+.defense {
+  background:var(--green-light); border:1px solid var(--green-border); border-radius:14px;
+  padding:22px 26px; position:relative; margin-bottom:24px;
+}
+.defense::before {
+  content:'🛡️'; position:absolute; top:-12px; left:20px;
+  font-size:20px; background:var(--green-light); padding:0 6px;
+}
+.defense .label {
+  font-family:var(--mono); font-size:10px; letter-spacing:1.5px; text-transform:uppercase;
+  color:var(--green); margin-bottom:8px; font-weight:600;
+}
+.defense p { font-size:14.5px; color:var(--text); line-height:1.75; }
+.defense code {
+  font-family:var(--mono); font-size:12px; background:rgba(42,157,110,0.1);
+  padding:2px 7px; border-radius:4px; color:var(--green);
+}
+
+/* ─── Scene card ─── */
+.scene {
+  background:var(--surface); border:1px solid var(--border); border-radius:16px;
+  overflow:hidden; margin-bottom:24px;
+}
+.scene-header {
+  display:flex; gap:8px; padding:14px 20px; border-bottom:1px solid var(--border);
+  background:var(--surface2);
+}
+.scene-dot { width:10px; height:10px; border-radius:50%; }
+.scene-title {
+  font-family:var(--mono); font-size:11px; color:var(--text3); margin-left:auto;
+  letter-spacing:1px; text-transform:uppercase;
+}
+.scene-body { padding:24px; }
+
+/* ─── Flow diagram ─── */
+.flow {
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:center;
+}
+.flow-step {
+  background:var(--surface2); border:1px solid var(--border); border-radius:12px;
+  padding:16px 18px; text-align:center; min-width:130px; max-width:180px;
+  flex:0 0 auto; transition:all 0.3s;
+}
+.flow-step:hover { transform:translateY(-2px); box-shadow:0 4px 16px rgba(0,0,0,0.06); }
+.flow-step .icon { font-size:28px; margin-bottom:6px; }
+.flow-step .ftitle { font-weight:700; font-size:13px; margin-bottom:4px; }
+.flow-step .fdesc { font-size:11.5px; color:var(--text2); line-height:1.5; }
+
+.flow-step.good { background:var(--green-light); border-color:var(--green-border); }
+.flow-step.good .ftitle { color:var(--green); }
+.flow-step.bad { background:var(--red-light); border-color:var(--red-border); }
+.flow-step.bad .ftitle { color:var(--red); }
+.flow-step.amber { background:var(--amber-light); border-color:var(--amber-border); }
+.flow-step.amber .ftitle { color:var(--amber); }
+.flow-step.blue { background:var(--blue-light); border-color:var(--blue-border); }
+.flow-step.blue .ftitle { color:var(--blue); }
+.flow-step.purple { background:var(--purple-light); border-color:var(--purple-border); }
+.flow-step.purple .ftitle { color:var(--purple); }
+
+.flow-arrow { font-size:20px; color:var(--border2); flex-shrink:0; }
+.flow-arrow.good-arrow { color:var(--green); }
+.flow-arrow.bad-arrow { color:var(--red); }
+
+/* ─── Pillar cards ─── */
+.pillar-grid {
+  display:grid; grid-template-columns:repeat(3, 1fr); gap:16px; margin-bottom:28px;
+}
+.pillar-card {
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  padding:24px 20px; text-align:center; transition:all 0.3s;
+}
+.pillar-card:hover {
+  transform:translateY(-3px); box-shadow:0 6px 24px rgba(0,0,0,0.06);
+  border-color:var(--border2);
+}
+.pillar-card .p-icon { font-size:36px; margin-bottom:10px; }
+.pillar-card .p-name {
+  font-family:var(--mono); font-size:13px; font-weight:600; color:var(--text);
+  margin-bottom:4px;
+}
+.pillar-card .p-title {
+  font-family:var(--serif); font-size:17px; font-weight:700; margin-bottom:6px;
+}
+.pillar-card .p-desc { font-size:13px; color:var(--text2); line-height:1.6; }
+.pillar-card.green-tint { border-top:3px solid var(--green); }
+.pillar-card.green-tint .p-title { color:var(--green); }
+.pillar-card.amber-tint { border-top:3px solid var(--amber); }
+.pillar-card.amber-tint .p-title { color:var(--amber); }
+.pillar-card.blue-tint { border-top:3px solid var(--blue); }
+.pillar-card.blue-tint .p-title { color:var(--blue); }
+
+/* ─── Privilege domains ─── */
+.domain-row {
+  display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px;
+}
+.domain-card {
+  border-radius:14px; padding:22px 20px; border:1px solid;
+}
+.domain-card h3 {
+  font-family:var(--serif); font-size:17px; font-weight:700; margin-bottom:10px;
+}
+.domain-card.m-mode {
+  background:var(--amber-light); border-color:var(--amber-border);
+}
+.domain-card.m-mode h3 { color:var(--amber); }
+.domain-card.u-mode {
+  background:var(--blue-light); border-color:var(--blue-border);
+}
+.domain-card.u-mode h3 { color:var(--blue); }
+.domain-card ul {
+  list-style:none; padding:0;
+}
+.domain-card ul li {
+  font-size:13px; color:var(--text2); line-height:1.8;
+  padding-left:18px; position:relative;
+}
+.domain-card ul li::before {
+  content:'›'; position:absolute; left:4px; color:var(--text3); font-weight:700;
+}
+
+/* ─── Memory map ─── */
+.memmap {
+  display:flex; flex-direction:column; gap:0; margin:24px 0;
+}
+.memmap-region {
+  display:grid;
+  grid-template-columns:110px 1fr 60px 140px;
+  gap:0;
+  align-items:stretch;
+  border:1px solid;
+  border-bottom:none;
+  transition:all 0.25s;
+  position:relative;
+}
+.memmap-region:last-child { border-bottom:1px solid; }
+.memmap-region:first-child {
+  border-radius:12px 12px 0 0;
+}
+.memmap-region:last-child {
+  border-radius:0 0 12px 12px;
+}
+.memmap-region:hover {
+  transform:scale(1.01);
+  z-index:2;
+  box-shadow:0 4px 20px rgba(0,0,0,0.08);
+}
+
+.memmap-region .mm-addr {
+  font-family:var(--mono); font-size:11px; padding:14px 12px;
+  display:flex; flex-direction:column; justify-content:center;
+  border-right:1px solid rgba(0,0,0,0.06);
+}
+.memmap-region .mm-addr .addr { font-weight:600; color:var(--text); }
+
+.memmap-region .mm-label {
+  padding:14px 16px; display:flex; flex-direction:column; justify-content:center;
+}
+.memmap-region .mm-label .region-name {
+  font-weight:700; font-size:14px; margin-bottom:2px;
+}
+.memmap-region .mm-label .region-desc {
+  font-size:11.5px; color:var(--text2); opacity:0.85;
+}
+
+.memmap-region .mm-size {
+  font-family:var(--mono); font-size:11px; font-weight:600;
+  display:flex; align-items:center; justify-content:center;
+  border-left:1px solid rgba(0,0,0,0.06);
+  border-right:1px solid rgba(0,0,0,0.06);
+}
+
+.memmap-region .mm-perms {
+  padding:10px 12px; display:flex; align-items:center; gap:6px;
+  justify-content:center; flex-wrap:wrap;
+}
+
+/* Memory region color variants */
+.memmap-region.m-code {
+  background:linear-gradient(90deg, #fdf3dc 0%, #fef8ec 100%);
+  border-color:var(--amber-border);
+}
+.memmap-region.m-code .region-name { color:var(--amber); }
+
+.memmap-region.m-data {
+  background:linear-gradient(90deg, #fdf3dc 0%, #fef9f0 100%);
+  border-color:var(--amber-border);
+}
+.memmap-region.m-data .region-name { color:#b07a15; }
+
+.memmap-region.m-shadow {
+  background:linear-gradient(90deg, #e8f6ef 0%, #f2faf6 100%);
+  border-color:var(--green-border);
+}
+.memmap-region.m-shadow .region-name { color:var(--green); }
+
+.memmap-region.u-code {
+  background:linear-gradient(90deg, #e8f0fa 0%, #f0f5fc 100%);
+  border-color:var(--blue-border);
+}
+.memmap-region.u-code .region-name { color:var(--blue); }
+
+.memmap-region.u-data {
+  background:linear-gradient(90deg, #f1ebfa 0%, #f6f2fc 100%);
+  border-color:var(--purple-border);
+}
+.memmap-region.u-data .region-name { color:var(--purple); }
+
+.memmap-region.u-shadow {
+  background:linear-gradient(90deg, #e8f6ef 0%, #f0faf5 100%);
+  border-color:var(--green-border);
+}
+.memmap-region.u-shadow .region-name { color:#1a8a5a; }
+
+/* Permission badges */
+.perm-badge {
+  font-family:var(--mono); font-size:9.5px; font-weight:600;
+  padding:3px 7px; border-radius:5px; letter-spacing:0.5px;
+  display:inline-block; white-space:nowrap;
+}
+.perm-badge.m-perm { background:var(--amber-light); color:var(--amber); border:1px solid var(--amber-border); }
+.perm-badge.u-perm { background:var(--blue-light); color:var(--blue); border:1px solid var(--blue-border); }
+.perm-badge.u-none { background:var(--red-light); color:var(--red); border:1px solid var(--red-border); font-size:9px; }
+.perm-badge.locked { background:var(--red-light); color:var(--red); border:1px solid var(--red-border); }
+
+/* W^X indicator */
+.wx-banner {
+  display:flex; align-items:center; gap:10px; justify-content:center;
+  margin-top:20px; padding:14px 20px;
+  background:var(--green-light); border:1px solid var(--green-border);
+  border-radius:10px;
+}
+.wx-banner .wx-icon { font-size:20px; }
+.wx-banner .wx-text {
+  font-family:var(--mono); font-size:12px; color:var(--green); font-weight:600;
+}
+.wx-banner .wx-desc {
+  font-size:13px; color:var(--text2);
+}
+
+/* ─── PMP table ─── */
+.pmp-grid {
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
+  gap:12px; margin-bottom:24px;
+}
+.pmp-entry {
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  padding:16px 18px; transition:all 0.3s; position:relative;
+}
+.pmp-entry:hover {
+  transform:translateY(-2px); box-shadow:0 4px 16px rgba(0,0,0,0.05);
+}
+.pmp-entry .pmp-num {
+  font-family:var(--mono); font-size:10px; letter-spacing:1px;
+  text-transform:uppercase; color:var(--text3); margin-bottom:6px;
+}
+.pmp-entry .pmp-name {
+  font-weight:700; font-size:14px; margin-bottom:8px; color:var(--text);
+}
+.pmp-entry .pmp-perms {
+  display:flex; flex-wrap:wrap; gap:5px; margin-bottom:6px;
+}
+.pmp-entry.locked-entry {
+  border-color:var(--red-border); border-width:2px;
+}
+.pmp-entry.locked-entry::after {
+  content:'🔒'; position:absolute; top:12px; right:14px; font-size:16px;
+}
+
+/* ─── Timeline/stepper ─── */
+.timeline {
+  position:relative; padding-left:40px; margin:24px 0;
+}
+.timeline::before {
+  content:''; position:absolute; left:15px; top:0; bottom:0; width:2px;
+  background:linear-gradient(180deg, var(--green), var(--blue), var(--purple));
+  border-radius:1px;
+}
+.timeline-step {
+  position:relative; margin-bottom:32px;
+}
+.timeline-step:last-child { margin-bottom:0; }
+.timeline-step .step-dot {
+  position:absolute; left:-33px; top:4px; width:20px; height:20px;
+  border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-size:10px; font-weight:700; color:white;
+  box-shadow:0 2px 8px rgba(0,0,0,0.12);
+}
+.timeline-step:nth-child(1) .step-dot { background:var(--green); }
+.timeline-step:nth-child(2) .step-dot { background:var(--amber); }
+.timeline-step:nth-child(3) .step-dot { background:var(--blue); }
+.timeline-step:nth-child(4) .step-dot { background:var(--purple); }
+.timeline-step:nth-child(5) .step-dot { background:var(--red); }
+
+.timeline-step .step-phase {
+  font-family:var(--mono); font-size:10px; letter-spacing:1.5px;
+  text-transform:uppercase; color:var(--text3); margin-bottom:4px;
+}
+.timeline-step .step-title {
+  font-family:var(--serif); font-size:18px; font-weight:700;
+  margin-bottom:6px; display:flex; align-items:center; gap:8px;
+}
+.timeline-step .step-desc {
+  font-size:14px; color:var(--text2); line-height:1.7; margin-bottom:10px;
+}
+.timeline-step .step-code {
+  font-family:var(--mono); font-size:11.5px; line-height:1.7;
+  background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+  padding:12px 16px; color:var(--text); overflow-x:auto;
+}
+.timeline-step .step-code .csr { color:var(--green); font-weight:600; }
+.timeline-step .step-code .comment { color:var(--text3); }
+.timeline-step .step-code .keyword { color:var(--purple); font-weight:600; }
+.timeline-step .step-code .value { color:var(--blue); }
+
+/* ─── Side-by-side CFI ─── */
+.cfi-columns {
+  display:grid; grid-template-columns:1fr 1fr; gap:20px;
+}
+.cfi-panel {
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  overflow:hidden;
+}
+.cfi-panel-header {
+  padding:16px 20px; border-bottom:1px solid var(--border);
+  background:var(--surface2);
+}
+.cfi-panel-header h3 {
+  font-family:var(--serif); font-size:17px; font-weight:700;
+  display:flex; align-items:center; gap:8px;
+}
+.cfi-panel-header .cfi-tag {
+  font-family:var(--mono); font-size:10px; letter-spacing:1px;
+  padding:3px 8px; border-radius:5px; font-weight:600;
+}
+.cfi-panel-header .cfi-tag.fwd { background:var(--blue-light); color:var(--blue); }
+.cfi-panel-header .cfi-tag.bwd { background:var(--green-light); color:var(--green); }
+.cfi-panel-body { padding:20px; }
+.cfi-panel-body .cfi-desc { font-size:13.5px; color:var(--text2); line-height:1.7; margin-bottom:16px; }
+.cfi-panel-body .cfi-code {
+  font-family:var(--mono); font-size:11px; line-height:1.8;
+  background:var(--surface2); border:1px solid var(--border);
+  border-radius:8px; padding:12px 14px; margin-bottom:14px; overflow-x:auto;
+}
+
+/* ─── Ecall wall ─── */
+.ecall-wall {
+  display:grid; grid-template-columns:1fr auto 1fr; gap:0; align-items:stretch;
+  border-radius:16px; overflow:hidden; border:1px solid var(--border);
+  margin-bottom:24px;
+}
+.ecall-side {
+  padding:24px 20px;
+}
+.ecall-side.u-side { background:var(--blue-light); }
+.ecall-side.m-side { background:var(--amber-light); }
+.ecall-side h3 {
+  font-family:var(--serif); font-size:17px; font-weight:700; margin-bottom:12px;
+  display:flex; align-items:center; gap:8px;
+}
+.ecall-side.u-side h3 { color:var(--blue); }
+.ecall-side.m-side h3 { color:var(--amber); }
+.ecall-side ul { list-style:none; padding:0; }
+.ecall-side ul li {
+  font-size:13px; color:var(--text2); line-height:2;
+  padding-left:16px; position:relative;
+}
+.ecall-side ul li::before {
+  content:'›'; position:absolute; left:2px; font-weight:700; color:var(--text3);
+}
+.ecall-gateway {
+  background:var(--surface2); border-left:1px solid var(--border);
+  border-right:1px solid var(--border);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:20px 16px; min-width:80px; position:relative;
+}
+.ecall-gateway .gw-icon { font-size:32px; margin-bottom:6px; }
+.ecall-gateway .gw-label {
+  font-family:var(--mono); font-size:11px; font-weight:600;
+  color:var(--text); letter-spacing:1px; text-transform:uppercase;
+}
+.ecall-gateway .gw-arrows {
+  display:flex; flex-direction:column; gap:4px; margin-top:8px;
+}
+.ecall-gateway .gw-arr {
+  font-family:var(--mono); font-size:10px; color:var(--text3);
+}
+
+/* Syscall table */
+.syscall-grid {
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));
+  gap:12px; margin-top:20px;
+}
+.syscall-card {
+  background:var(--surface); border:1px solid var(--border); border-radius:10px;
+  padding:14px 16px; transition:all 0.3s;
+}
+.syscall-card:hover {
+  transform:translateY(-2px); box-shadow:0 3px 12px rgba(0,0,0,0.05);
+}
+.syscall-card .sc-num {
+  font-family:var(--mono); font-size:20px; font-weight:700; color:var(--blue);
+  margin-bottom:4px;
+}
+.syscall-card .sc-name {
+  font-family:var(--mono); font-size:13px; font-weight:600; margin-bottom:4px;
+}
+.syscall-card .sc-desc {
+  font-size:12px; color:var(--text2); line-height:1.5;
+}
+
+/* ─── Recap grid ─── */
+.recap {
+  background:var(--surface); border:1px solid var(--border); border-radius:16px;
+  padding:32px; margin-top:8px;
+}
+.recap h2 {
+  font-family:var(--serif); font-size:22px; font-weight:700; margin-bottom:20px;
+  text-align:center;
+}
+.recap-grid {
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:14px;
+}
+.recap-item {
+  padding:16px; border-radius:12px; border:1px solid var(--border);
+  transition:all 0.3s;
+}
+.recap-item:hover {
+  transform:translateY(-2px); box-shadow:0 4px 16px rgba(0,0,0,0.05);
+}
+.recap-item .ri-icon { font-size:24px; margin-bottom:8px; }
+.recap-item .ri-attack { font-weight:700; font-size:14px; margin-bottom:4px; color:var(--red); }
+.recap-item .ri-desc { font-size:12.5px; color:var(--text2); line-height:1.6; margin-bottom:8px; }
+.recap-item .ri-defense {
+  font-family:var(--mono); font-size:11px; color:var(--green); margin-top:4px;
+  padding:4px 10px; background:var(--green-light); border-radius:6px; display:inline-block;
+}
+
+/* ─── Inline code ─── */
+code {
+  font-family:var(--mono); font-size:12px; background:var(--surface2);
+  padding:2px 7px; border-radius:4px; color:var(--text);
+}
+code.green { background:rgba(42,157,110,0.1); color:var(--green); }
+code.blue { background:rgba(53,116,196,0.1); color:var(--blue); }
+code.amber { background:rgba(196,138,26,0.1); color:var(--amber); }
+code.red { background:rgba(201,69,58,0.1); color:var(--red); }
+code.purple { background:rgba(124,82,184,0.1); color:var(--purple); }
+
+/* ─── Small helper ─── */
+.props-row {
+  display:flex; flex-wrap:wrap; gap:10px; margin:16px 0;
+}
+.prop-tag {
+  font-family:var(--mono); font-size:11px; padding:5px 12px;
+  border-radius:8px; font-weight:600; display:flex; align-items:center; gap:5px;
+}
+.prop-tag.green { background:var(--green-light); color:var(--green); border:1px solid var(--green-border); }
+.prop-tag.red { background:var(--red-light); color:var(--red); border:1px solid var(--red-border); }
+.prop-tag.amber { background:var(--amber-light); color:var(--amber); border:1px solid var(--amber-border); }
+
+/* ─── Result badges in CFI section ─── */
+.result-row {
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+}
+.result-badge {
+  font-family:var(--mono); font-size:11px; font-weight:600;
+  padding:4px 10px; border-radius:6px; display:inline-flex;
+  align-items:center; gap:4px;
+}
+.result-badge.pass { background:var(--green-light); color:var(--green); }
+.result-badge.fail { background:var(--red-light); color:var(--red); }
+
+/* ─── Footer ─── */
+.footer {
+  text-align:center; margin-top:48px; padding-top:28px;
+  border-top:1px solid var(--border);
+}
+.footer p {
+  font-size:12px; color:var(--text3); line-height:1.7;
+}
+.footer code { font-size:11px; }
+
+/* ─── Responsive ─── */
+@media(max-width:700px) {
+  .pillar-grid { grid-template-columns:1fr; }
+  .domain-row { grid-template-columns:1fr; }
+  .cfi-columns { grid-template-columns:1fr; }
+  .ecall-wall { grid-template-columns:1fr; }
+  .ecall-gateway { flex-direction:row; gap:12px; min-width:auto; padding:12px 20px;
+    border-left:none; border-right:none; border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
+  .flow { flex-direction:column; }
+  .flow-arrow { transform:rotate(90deg); }
+  .memmap-region {
+    grid-template-columns:80px 1fr 50px;
+  }
+  .memmap-region .mm-perms { display:none; }
+  .pmp-grid { grid-template-columns:1fr; }
+}
+@media(max-width:480px) {
+  .memmap-region {
+    grid-template-columns:1fr;
+  }
+  .memmap-region .mm-addr { border-right:none; border-bottom:1px solid rgba(0,0,0,0.06); }
+  .memmap-region .mm-size { border:none; justify-content:flex-start; padding:6px 12px; }
+  .memmap-region .mm-perms { justify-content:flex-start; padding:6px 12px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ══════════════════════════ HERO ══════════════════════════ -->
+<div class="hero">
+  <div class="eyebrow">CFI · PMP · M/U Mode Isolation</div>
+  <h1>RISC-V <em>Root of Trust</em><br>Architecture</h1>
+  <p class="intro">Hardware CFI + PMP Privilege Separation in a Bare-Metal Rust Kernel — a visual guide to how Zicfilp, Zicfiss, and PMP work together to create a hardware-enforced trust anchor.</p>
+</div>
+
+<!-- ══════════════════════════ SECTION 1: ARCHITECTURE OVERVIEW ══════════════════════════ -->
+<div class="arch-section">
+  <div class="section-num">Section 01</div>
+  <h2><span class="emoji">🏗️</span> Architecture Overview</h2>
+  <div class="subtitle">Three hardware pillars form the foundation of trust</div>
+
+  <div class="pillar-grid">
+    <div class="pillar-card blue-tint">
+      <div class="p-icon">🛬</div>
+      <div class="p-name">Zicfilp</div>
+      <div class="p-title">Landing Pads</div>
+      <div class="p-desc">Forward-edge CFI — every indirect call/jump target must begin with an <code class="blue">lpad</code> instruction or the CPU traps.</div>
+    </div>
+    <div class="pillar-card green-tint">
+      <div class="p-icon">🔐</div>
+      <div class="p-name">Zicfiss</div>
+      <div class="p-title">Shadow Stack</div>
+      <div class="p-desc">Backward-edge CFI — return addresses are verified against a hardware-protected shadow stack on every <code class="green">ret</code>.</div>
+    </div>
+    <div class="pillar-card amber-tint">
+      <div class="p-icon">🧱</div>
+      <div class="p-name">PMP</div>
+      <div class="p-title">Memory Protection</div>
+      <div class="p-desc">Physical Memory Protection isolates M-mode secrets from U-mode and enforces W^X across all regions.</div>
+    </div>
+  </div>
+
+  <div class="scene">
+    <div class="scene-header">
+      <div class="scene-dot" style="background:var(--red)"></div>
+      <div class="scene-dot" style="background:var(--amber)"></div>
+      <div class="scene-dot" style="background:var(--green)"></div>
+      <span class="scene-title">Privilege Flow</span>
+    </div>
+    <div class="scene-body">
+      <div class="flow">
+        <div class="flow-step">
+          <div class="icon">⚙️</div>
+          <div class="ftitle">Hardware</div>
+          <div class="fdesc">Zicfilp + Zicfiss + PMP enforcement layer</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step amber">
+          <div class="icon">🔑</div>
+          <div class="ftitle">M-Mode RoT</div>
+          <div class="fdesc">Boot, crypto, keys, measurement, ecall handler</div>
+        </div>
+        <div class="flow-arrow good-arrow">→</div>
+        <div class="flow-step good">
+          <div class="icon">⬇️</div>
+          <div class="ftitle">Privilege Drop</div>
+          <div class="fdesc">PMP configured, CFI enabled, mret executed</div>
+        </div>
+        <div class="flow-arrow good-arrow">→</div>
+        <div class="flow-step blue">
+          <div class="icon">📦</div>
+          <div class="ftitle">U-Mode App</div>
+          <div class="fdesc">Sandboxed firmware, CFI enforced, PMP restricted</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="domain-row">
+    <div class="domain-card m-mode">
+      <h3>🔑 M-Mode — Root of Trust</h3>
+      <ul>
+        <li>Secure boot &amp; initialization</li>
+        <li>Cryptographic key management</li>
+        <li>Firmware measurement (hash)</li>
+        <li>Secret sealing &amp; attestation</li>
+        <li>Ecall trap handler (syscall dispatch)</li>
+        <li>Shadow stack &amp; CFI setup</li>
+      </ul>
+    </div>
+    <div class="domain-card u-mode">
+      <h3>📦 U-Mode — Application</h3>
+      <ul>
+        <li>Sandboxed firmware execution</li>
+        <li>CFI enforced (landing pads + shadow stack)</li>
+        <li>PMP-restricted memory access</li>
+        <li>No access to M-mode secrets</li>
+        <li>Services via ecall only</li>
+        <li>W^X enforced (no code injection)</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 2: MEMORY MAP ══════════════════════════ -->
+<div class="arch-section">
+  <div class="section-num">Section 02</div>
+  <h2><span class="emoji">🗺️</span> Memory Map</h2>
+  <div class="subtitle">Power-of-2 aligned regions for efficient PMP NAPOT encoding — one PMP entry per region</div>
+
+  <div class="scene">
+    <div class="scene-header">
+      <div class="scene-dot" style="background:var(--red)"></div>
+      <div class="scene-dot" style="background:var(--amber)"></div>
+      <div class="scene-dot" style="background:var(--green)"></div>
+      <span class="scene-title">Address Space Layout</span>
+    </div>
+    <div class="scene-body" style="padding:20px 16px;">
+      <div class="memmap">
+
+        <div class="memmap-region u-shadow">
+          <div class="mm-addr"><span class="addr">0x8005_9000</span></div>
+          <div class="mm-label">
+            <span class="region-name">U_SW_SHADOW</span>
+            <span class="region-desc">U-mode software shadow stack</span>
+          </div>
+          <div class="mm-size">4K</div>
+          <div class="mm-perms">
+            <span class="perm-badge m-perm">M:RW</span>
+            <span class="perm-badge u-perm">U:RW</span>
+          </div>
+        </div>
+
+        <div class="memmap-region u-shadow">
+          <div class="mm-addr"><span class="addr">0x8005_8000</span></div>
+          <div class="mm-label">
+            <span class="region-name">U_SHADOW</span>
+            <span class="region-desc">U-mode HW shadow stack (Zicfiss)</span>
+          </div>
+          <div class="mm-size">4K</div>
+          <div class="mm-perms">
+            <span class="perm-badge m-perm">M:RW</span>
+            <span class="perm-badge u-perm">U:RW</span>
+          </div>
+        </div>
+
+        <div class="memmap-region u-data">
+          <div class="mm-addr"><span class="addr">0x8004_8000</span></div>
+          <div class="mm-label">
+            <span class="region-name">U_RAM</span>
+            <span class="region-desc">U-mode data + stack</span>
+          </div>
+          <div class="mm-size">64K</div>
+          <div class="mm-perms">
+            <span class="perm-badge m-perm">M:RW</span>
+            <span class="perm-badge u-perm">U:RW</span>
+          </div>
+        </div>
+
+        <div class="memmap-region u-data">
+          <div class="mm-addr"><span class="addr">0x8004_0000</span></div>
+          <div class="mm-label">
+            <span class="region-name">U_RODATA</span>
+            <span class="region-desc">U-mode read-only data</span>
+          </div>
+          <div class="mm-size">32K</div>
+          <div class="mm-perms">
+            <span class="perm-badge m-perm">M:RW</span>
+            <span class="perm-badge u-perm">U:R</span>
+          </div>
+        </div>
+
+        <div class="memmap-region u-code">
+          <div class="mm-addr"><span class="addr">0x8002_0000</span></div>
+          <div class="mm-label">
+            <span class="region-name">U_CODE</span>
+            <span class="region-desc">U-mode firmware code</span>
+          </div>
+          <div class="mm-size">128K</div>
+          <div class="mm-perms">
+            <span class="perm-badge m-perm">M:RWX</span>
+            <span class="perm-badge u-perm">U:RX</span>
+          </div>
+        </div>
+
+        <div class="memmap-region m-shadow">
+          <div class="mm-addr"><span class="addr">0x8001_9000</span></div>
+          <div class="mm-label">
+            <span class="region-name">M_SW_SHADOW</span>
+            <span class="region-desc">M-mode software shadow stack</span>
+          </div>
+          <div class="mm-size">4K</div>
+          <div class="mm-perms">
+            <span class="perm-badge m-perm">M:RW</span>
+            <span class="perm-badge u-none">U:none</span>
+          </div>
+        </div>
+
+        <div class="memmap-region m-shadow">
+          <div class="mm-addr"><span class="addr">0x8001_8000</span></div>
+          <div class="mm-label">
+            <span class="region-name">M_SHADOW</span>
+            <span class="region-desc">M-mode HW shadow stack (Zicfiss)</span>
+          </div>
+          <div class="mm-size">4K</div>
+          <div class="mm-perms">
+            <span class="perm-badge m-perm">M:RW</span>
+            <span class="perm-badge u-none">U:none</span>
+          </div>
+        </div>
+
+        <div class="memmap-region m-data">
+          <div class="mm-addr"><span class="addr">0x8001_0000</span></div>
+          <div class="mm-label">
+            <span class="region-name">M_RAM</span>
+            <span class="region-desc">M-mode data, stack, secrets</span>
+          </div>
+          <div class="mm-size">32K</div>
+          <div class="mm-perms">
+            <span class="perm-badge m-perm">M:RW</span>
+            <span class="perm-badge u-none">U:none</span>
+          </div>
+        </div>
+
+        <div class="memmap-region m-code">
+          <div class="mm-addr"><span class="addr">0x8000_0000</span></div>
+          <div class="mm-label">
+            <span class="region-name">ROM</span>
+            <span class="region-desc">M-mode code (locked — immutable)</span>
+          </div>
+          <div class="mm-size">64K</div>
+          <div class="mm-perms">
+            <span class="perm-badge locked">🔒 M:RX</span>
+            <span class="perm-badge u-none">U:none</span>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="wx-banner">
+        <div class="wx-icon">🛡️</div>
+        <div>
+          <div class="wx-text">W^X Enforced Across All Regions</div>
+          <div class="wx-desc">Code is RX (no write). Data is RW (no execute). No region is both writable and executable for U-mode.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="analogy">
+    <div class="label">Key Insight</div>
+    <p>The memory map is the <strong>physical manifestation of the trust boundary</strong>. Everything above <code class="amber">0x8002_0000</code> is U-mode territory. Everything below belongs to M-mode. Shadow stacks live in their own isolated regions — an attacker who overflows a data buffer <strong>cannot reach the shadow stack</strong> because PMP blocks cross-region access.</p>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 3: PMP CONFIGURATION ══════════════════════════ -->
+<div class="arch-section">
+  <div class="section-num">Section 03</div>
+  <h2><span class="emoji">🔧</span> PMP Configuration</h2>
+  <div class="subtitle">8 PMP entries using NAPOT encoding — one entry per memory region</div>
+
+  <div class="pmp-grid">
+    <div class="pmp-entry locked-entry">
+      <div class="pmp-num">Entry 0</div>
+      <div class="pmp-name">ROM (64K)</div>
+      <div class="pmp-perms">
+        <span class="perm-badge locked">🔒 LOCKED</span>
+        <span class="perm-badge m-perm">M:RX</span>
+        <span class="perm-badge u-none">U:none</span>
+      </div>
+    </div>
+
+    <div class="pmp-entry">
+      <div class="pmp-num">Entry 1</div>
+      <div class="pmp-name">M_RAM (32K)</div>
+      <div class="pmp-perms">
+        <span class="perm-badge m-perm">M:RW</span>
+        <span class="perm-badge u-none">U:none</span>
+      </div>
+    </div>
+
+    <div class="pmp-entry">
+      <div class="pmp-num">Entry 2</div>
+      <div class="pmp-name">M_SHADOW (8K)</div>
+      <div class="pmp-perms">
+        <span class="perm-badge m-perm">M:RW</span>
+        <span class="perm-badge u-none">U:none</span>
+      </div>
+    </div>
+
+    <div class="pmp-entry">
+      <div class="pmp-num">Entry 3</div>
+      <div class="pmp-name">U_CODE (128K)</div>
+      <div class="pmp-perms">
+        <span class="perm-badge m-perm">M:RWX</span>
+        <span class="perm-badge u-perm">U:RX</span>
+      </div>
+    </div>
+
+    <div class="pmp-entry">
+      <div class="pmp-num">Entry 4</div>
+      <div class="pmp-name">U_RODATA (32K)</div>
+      <div class="pmp-perms">
+        <span class="perm-badge m-perm">M:RW</span>
+        <span class="perm-badge u-perm">U:R</span>
+      </div>
+    </div>
+
+    <div class="pmp-entry">
+      <div class="pmp-num">Entry 5</div>
+      <div class="pmp-name">U_RAM (64K)</div>
+      <div class="pmp-perms">
+        <span class="perm-badge m-perm">M:RW</span>
+        <span class="perm-badge u-perm">U:RW</span>
+      </div>
+    </div>
+
+    <div class="pmp-entry">
+      <div class="pmp-num">Entry 6</div>
+      <div class="pmp-name">U_SHADOW (8K)</div>
+      <div class="pmp-perms">
+        <span class="perm-badge m-perm">M:RW</span>
+        <span class="perm-badge u-perm">U:RW</span>
+      </div>
+    </div>
+
+    <div class="pmp-entry">
+      <div class="pmp-num">Entry 7</div>
+      <div class="pmp-name">UART (4K)</div>
+      <div class="pmp-perms">
+        <span class="perm-badge m-perm">M:RW</span>
+        <span class="perm-badge u-perm">U:RW</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="props-row">
+    <div class="prop-tag red">🔒 Locked Code — even M-mode can't self-modify</div>
+    <div class="prop-tag green">🛡️ W^X — no region is both writable + executable</div>
+    <div class="prop-tag amber">🚫 Deny-by-default — unmatched U-mode access = fault</div>
+  </div>
+
+  <div class="defense">
+    <div class="label">PMP Semantics</div>
+    <p><strong>Locked entries</strong> (L=1) apply to M-mode too — M-mode ROM is RX-only even for M-mode itself. <strong>Unlocked entries</strong> with no U-mode permissions: M-mode bypasses PMP (full access), but U-mode sees <code class="red">deny</code>. Any U-mode access without a matching PMP entry is <strong>denied by default</strong> per the RISC-V spec.</p>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 4: BOOT SEQUENCE ══════════════════════════ -->
+<div class="arch-section">
+  <div class="section-num">Section 04</div>
+  <h2><span class="emoji">🚀</span> Boot Sequence</h2>
+  <div class="subtitle">Five phases from power-on to secure U-mode execution</div>
+
+  <div class="scene">
+    <div class="scene-header">
+      <div class="scene-dot" style="background:var(--red)"></div>
+      <div class="scene-dot" style="background:var(--amber)"></div>
+      <div class="scene-dot" style="background:var(--green)"></div>
+      <span class="scene-title">Boot Timeline</span>
+    </div>
+    <div class="scene-body">
+      <div class="timeline">
+
+        <div class="timeline-step">
+          <div class="step-dot">1</div>
+          <div class="step-phase">Phase 1</div>
+          <div class="step-title">🛡️ CFI Initialization</div>
+          <div class="step-desc">Enable Zicfilp (landing pads) and Zicfiss (shadow stack) for U-mode via the <code class="green">menvcfg</code> CSR. Initialize shadow stack pointers for both M-mode and U-mode.</div>
+          <div class="step-code">
+            <span class="csr">csrs</span> menvcfg, <span class="value">LPE|SSE</span>    <span class="comment">// enable Zicfilp + Zicfiss for U-mode</span><br>
+            <span class="csr">csrw</span> ssp, _m_shadow_stack_top  <span class="comment">// init M-mode shadow stack</span>
+          </div>
+        </div>
+
+        <div class="timeline-step">
+          <div class="step-dot">2</div>
+          <div class="step-phase">Phase 2</div>
+          <div class="step-title">🧱 PMP Configuration</div>
+          <div class="step-desc">Write 8 PMP address and config entries to isolate M-mode and U-mode memory regions. Entry 0 is locked — M-mode code becomes immutable.</div>
+          <div class="step-code">
+            <span class="csr">csrw</span> pmpaddr0, <span class="value">napot(0x80000000, 64K)</span><br>
+            <span class="csr">csrw</span> pmpcfg0, <span class="value">L|NAPOT|RX</span>   <span class="comment">// locked RX for ROM</span><br>
+            <span class="comment">// ... entries 1–7 for M_RAM, shadow stacks, U regions ...</span>
+          </div>
+        </div>
+
+        <div class="timeline-step">
+          <div class="step-dot">3</div>
+          <div class="step-phase">Phase 3</div>
+          <div class="step-title">📏 Firmware Measurement</div>
+          <div class="step-desc">Hash the U-mode code region and compare against a known-good golden value. If the measurement fails, the system halts — no untrusted code runs.</div>
+          <div class="step-code">
+            <span class="keyword">let</span> hash = <span class="csr">rot_measure_firmware</span>(<span class="value">U_CODE</span>, <span class="value">128K</span>);<br>
+            <span class="keyword">assert_eq!</span>(hash, <span class="value">GOLDEN_HASH</span>);  <span class="comment">// halt if mismatch</span>
+          </div>
+        </div>
+
+        <div class="timeline-step">
+          <div class="step-dot">4</div>
+          <div class="step-phase">Phase 4</div>
+          <div class="step-title">🔑 Secret Sealing</div>
+          <div class="step-desc">Use the device identity key to seal secrets. Sealed data can only be unsealed by M-mode — U-mode never sees raw key material.</div>
+          <div class="step-code">
+            <span class="keyword">let</span> sealed = <span class="csr">rot_seal_secret</span>(<span class="value">data</span>, <span class="value">key_id</span>);<br>
+            <span class="comment">// secret bound to device identity + firmware measurement</span>
+          </div>
+        </div>
+
+        <div class="timeline-step">
+          <div class="step-dot">5</div>
+          <div class="step-phase">Phase 5</div>
+          <div class="step-title">⬇️ U-Mode Launch</div>
+          <div class="step-desc">Set <code class="purple">mstatus.MPP</code> to User mode, load the U-mode entry point into <code class="purple">mepc</code>, set up U-mode stack and shadow stack pointers, then execute <code class="red">mret</code> to drop privilege.</div>
+          <div class="step-code">
+            <span class="comment">// mstatus.MPP = User (0b00)</span><br>
+            <span class="csr">csrw</span> mepc, <span class="value">_u_entry</span>        <span class="comment">// U-mode entry point</span><br>
+            <span class="csr">csrw</span> ssp, <span class="value">_u_shadow_top</span>    <span class="comment">// U-mode shadow stack</span><br>
+            <span class="keyword">mret</span>                        <span class="comment">// privilege drop → U-mode</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 5: CFI ENFORCEMENT ══════════════════════════ -->
+<div class="arch-section">
+  <div class="section-num">Section 05</div>
+  <h2><span class="emoji">🔒</span> CFI Enforcement Model</h2>
+  <div class="subtitle">Dual-edge control flow integrity — forward and backward protection</div>
+
+  <div class="cfi-columns">
+
+    <!-- Forward Edge -->
+    <div class="cfi-panel">
+      <div class="cfi-panel-header">
+        <h3>🛬 Forward Edge <span class="cfi-tag fwd">Zicfilp</span></h3>
+      </div>
+      <div class="cfi-panel-body">
+        <div class="cfi-desc">
+          Every indirect call/jump target <strong>must</strong> begin with an <code class="blue">lpad</code> instruction. The CPU checks on every indirect branch — if the target doesn't start with <code class="blue">lpad</code>, it traps immediately.
+        </div>
+        <div class="cfi-code">
+<span style="color:var(--text3)">// Caller</span><br>
+la&nbsp;&nbsp;t1, target<br>
+jalr ra, t1, 0&nbsp;&nbsp;<span style="color:var(--text3)">// indirect call</span><br>
+<br>
+<span style="color:var(--text3)">// Target — must have lpad</span><br>
+.4byte 0x00000017&nbsp;&nbsp;<span style="color:var(--text3)">// lpad 0</span><br>
+... function body ...<br>
+ret
+        </div>
+        <div class="result-row">
+          <span class="result-badge pass">✅ lpad present → continue</span>
+          <span class="result-badge fail">❌ no lpad → trap (mcause=18)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Backward Edge -->
+    <div class="cfi-panel">
+      <div class="cfi-panel-header">
+        <h3>🔐 Backward Edge <span class="cfi-tag bwd">Zicfiss</span></h3>
+      </div>
+      <div class="cfi-panel-body">
+        <div class="cfi-desc">
+          On function entry, <code class="green">sspush ra</code> saves the return address to the hardware shadow stack. On return, <code class="green">sspopchk ra</code> verifies it matches — detecting any corruption.
+        </div>
+        <div class="cfi-code">
+<span style="color:var(--text3)">// Prologue</span><br>
+.4byte 0x60100073&nbsp;&nbsp;<span style="color:var(--text3)">// sspush ra</span><br>
+sw&nbsp;&nbsp;ra, 12(sp)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--text3)">// regular save</span><br>
+<br>
+<span style="color:var(--text3)">// Epilogue</span><br>
+lw&nbsp;&nbsp;ra, 12(sp)<br>
+.4byte 0x60500073&nbsp;&nbsp;<span style="color:var(--text3)">// sspopchk ra</span><br>
+ret
+        </div>
+        <div class="result-row">
+          <span class="result-badge pass">✅ ra matches → return</span>
+          <span class="result-badge fail">❌ mismatch → trap (ROP detected)</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="margin-top:20px;">
+    <div class="analogy">
+      <div class="label">Dual Shadow Stack — Defense in Depth</div>
+      <p>The system runs <strong>both</strong> a hardware shadow stack (Zicfiss via <code class="green">ssp</code> CSR) and a software shadow stack (via the <code class="green">gp</code> register). On Zicfiss-capable cores, both check every return. On cores without Zicfiss, the software stack still catches ROP attacks. Two independent verifications — an attacker must defeat both.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 6: ECALL INTERFACE ══════════════════════════ -->
+<div class="arch-section">
+  <div class="section-num">Section 06</div>
+  <h2><span class="emoji">📡</span> Ecall Interface (U → M)</h2>
+  <div class="subtitle">The only legal crossing point between privilege levels</div>
+
+  <div class="ecall-wall">
+    <div class="ecall-side u-side">
+      <h3>📦 U-Mode</h3>
+      <ul>
+        <li>Sandboxed execution</li>
+        <li>PMP-restricted memory</li>
+        <li>CFI enforced (lpad + shadow stack)</li>
+        <li>Cannot access M-mode regions</li>
+        <li>Requests services via ecall</li>
+      </ul>
+    </div>
+    <div class="ecall-gateway">
+      <div class="gw-icon">🔒</div>
+      <div class="gw-label">ecall</div>
+      <div class="gw-arrows">
+        <span class="gw-arr">a7 → syscall #</span>
+        <span class="gw-arr">a0 → arg / ret</span>
+      </div>
+    </div>
+    <div class="ecall-side m-side">
+      <h3>🔑 M-Mode</h3>
+      <ul>
+        <li>Trap handler dispatches on a7</li>
+        <li>Validates arguments</li>
+        <li>Accesses secrets &amp; hardware</li>
+        <li>Returns result in a0</li>
+        <li>Resumes U-mode via mret</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="syscall-grid">
+    <div class="syscall-card">
+      <div class="sc-num">0</div>
+      <div class="sc-name">uart_putc</div>
+      <div class="sc-desc">Print a single character to the UART console. <code>a0</code> = character.</div>
+    </div>
+    <div class="syscall-card">
+      <div class="sc-num">1</div>
+      <div class="sc-name">uart_puts</div>
+      <div class="sc-desc">Print a string. <code>a0</code> = pointer, <code>a1</code> = length. M-mode validates the pointer is in U-mode memory.</div>
+    </div>
+    <div class="syscall-card">
+      <div class="sc-num">2</div>
+      <div class="sc-name">exit</div>
+      <div class="sc-desc">Halt the system. <code>a0</code> = exit code. Uses QEMU test finisher for clean shutdown.</div>
+    </div>
+    <div class="syscall-card">
+      <div class="sc-num">3</div>
+      <div class="sc-name">get_random</div>
+      <div class="sc-desc">Fill buffer with random bytes (stub). <code>a0</code> = buffer ptr, <code>a1</code> = length.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 7: ATTACK RESISTANCE ══════════════════════════ -->
+<div class="arch-section" style="border-bottom:none; padding-bottom:0;">
+  <div class="section-num">Section 07</div>
+  <h2><span class="emoji">⚔️</span> Attack Resistance</h2>
+  <div class="subtitle">How each layer of the architecture defends against known attack classes</div>
+
+  <div class="recap">
+    <h2>Protection Matrix</h2>
+    <div class="recap-grid">
+
+      <div class="recap-item">
+        <div class="ri-icon">🔄</div>
+        <div class="ri-attack">ROP</div>
+        <div class="ri-desc">Return-Oriented Programming — corrupts return addresses to chain gadgets.</div>
+        <div class="ri-defense">🛡 Zicfiss shadow stack</div>
+      </div>
+
+      <div class="recap-item">
+        <div class="ri-icon">🔀</div>
+        <div class="ri-attack">JOP</div>
+        <div class="ri-desc">Jump-Oriented Programming — redirects indirect jumps to arbitrary code.</div>
+        <div class="ri-defense">🛡 Zicfilp landing pads</div>
+      </div>
+
+      <div class="recap-item">
+        <div class="ri-icon">💉</div>
+        <div class="ri-attack">Code Injection</div>
+        <div class="ri-desc">Write shellcode to data memory, then execute it.</div>
+        <div class="ri-defense">🛡 W^X via PMP</div>
+      </div>
+
+      <div class="recap-item">
+        <div class="ri-icon">⬆️</div>
+        <div class="ri-attack">Privilege Escalation</div>
+        <div class="ri-desc">U-mode tries to access M-mode resources directly.</div>
+        <div class="ri-defense">🛡 PMP deny + mret</div>
+      </div>
+
+      <div class="recap-item">
+        <div class="ri-icon">🔧</div>
+        <div class="ri-attack">M-Mode Tampering</div>
+        <div class="ri-desc">Attacker tries to modify M-mode code at runtime.</div>
+        <div class="ri-defense">🛡 Locked PMP entry</div>
+      </div>
+
+      <div class="recap-item">
+        <div class="ri-icon">📝</div>
+        <div class="ri-attack">Shadow Stack Corruption</div>
+        <div class="ri-desc">Overflow data buffer into shadow stack to bypass CFI.</div>
+        <div class="ri-defense">🛡 Isolated PMP region</div>
+      </div>
+
+      <div class="recap-item">
+        <div class="ri-icon">🕵️</div>
+        <div class="ri-attack">Secret Exfiltration</div>
+        <div class="ri-desc">U-mode reads cryptographic keys from M-mode memory.</div>
+        <div class="ri-defense">🛡 M_RAM denied to U-mode</div>
+      </div>
+
+      <div class="recap-item">
+        <div class="ri-icon">🎭</div>
+        <div class="ri-attack">Type Confusion</div>
+        <div class="ri-desc">Redirect indirect call to wrong function type.</div>
+        <div class="ri-defense">🛡 Labeled landing pads</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ FOOTER ══════════════════════════ -->
+<div class="footer">
+  <p>RISC-V Root of Trust Architecture — <code>rot/</code> in the <code>cfi-riscv-rust</code> project<br>
+  Hardware CFI (Zicfilp + Zicfiss) · PMP Privilege Isolation · Bare-Metal Rust</p>
+</div>
+
+</div>
+</body>
+</html>
