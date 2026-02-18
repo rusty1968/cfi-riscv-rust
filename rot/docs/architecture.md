@@ -117,13 +117,21 @@ Function prologue:                 Function epilogue:
     ┌─── If ra was corrupted (ROP), sspopchk detects mismatch → trap!
 ```
 
-### Dual Shadow Stack (Defense in Depth)
+### Software Shadow Stack (Fallback for non-Zicfiss cores)
 
-We run **both** hardware Zicfiss and a software shadow stack (via `gp` register):
+The same binary includes **both** Zicfiss instructions and a software shadow
+stack (via the `gp` register). Since Zicfiss instructions encode in the
+Zimop/Zcmop space, they execute as **guaranteed NOPs** on cores without CFI
+extensions. This gives graceful degradation — one binary, two behaviors:
+
+| Core has Zicfiss? | HW `sspush`/`sspopchk` | SW `gp`-based check | Effective protection |
+|---|---|---|---|
+| **Yes** | Enforced by CPU | Redundant (harmless overhead) | Hardware-grade |
+| **No** | Executes as NOP | Active — sole defense | Software-grade |
 
 ```
 Entry:
-    .4byte 0x60100073       // HW sspush ra
+    .4byte 0x60100073       // HW sspush ra  (NOP if no Zicfiss)
     sw     ra, 0(gp)        // SW shadow stack push
     addi   gp, gp, 4
 
@@ -132,14 +140,22 @@ Return:
     lw     t0, 0(gp)
     lw     ra, 12(sp)
     bne    t0, ra, fault     // SW check
-    .4byte 0x60500073       // HW sspopchk ra (redundant check)
+    .4byte 0x60500073       // HW sspopchk ra (NOP if no Zicfiss)
     ret
 ```
 
-This provides:
-1. **Hardware enforcement** on Zicfiss-capable cores (cannot be bypassed by software)
-2. **Software enforcement** on cores without Zicfiss (defense against ROP)
-3. **Dual verification** on CFI-capable cores (defense in depth)
+**Why not run both on Zicfiss cores?** On a Zicfiss-capable core the HW
+shadow stack is strictly stronger — only `sspush`/`sspopchk` can write to
+SS-attributed pages, so no software exploit can corrupt it. The SW check
+uses regular RW memory reachable via `gp`, which an attacker who can
+corrupt a register or write to that region can defeat. Running both
+wastes cycles and burns the `gp` register for no additional security.
+
+A production deployment would detect Zicfiss at boot and skip the SW
+shadow stack path entirely, freeing `gp` for the global pointer or
+thread-local storage. The current code runs both unconditionally because
+it targets QEMU, where `sspush`/`sspopchk` are NOPs and only the SW
+path provides real protection.
 
 ---
 
@@ -267,7 +283,8 @@ rot/
 | Limitation | Path Forward |
 |---|---|
 | `rustc` won't auto-emit `lpad`/`sspush` for RISC-V | Awaiting LLVM feature wiring in rustc |
-| Software shadow stack bypassable if attacker leaks `gp` | Hardware Zicfiss provides true protection |
+| SW shadow stack always runs alongside HW on Zicfiss cores | Detect Zicfiss at boot; skip SW path when HW is available, freeing `gp` |
+| Software shadow stack bypassable if attacker leaks `gp` | Hardware Zicfiss provides true protection; SW is fallback only |
 | No MMU (PMP only) — coarser isolation granularity | Use Sv32 MMU for page-level protection if available |
 | Measurement is XOR hash (stub) | Replace with SHA-256/384 (e.g., `sha2` crate or HW accelerator) |
 | Crypto sealing is XOR (stub) | Replace with AES-GCM using device identity key |
