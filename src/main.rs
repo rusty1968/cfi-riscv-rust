@@ -4,14 +4,19 @@
 //!   - Zicfilp: Landing pads for forward-edge CFI (indirect call/jump targets)
 //!   - Zicfiss: Hardware shadow stack for backward-edge CFI (return address protection)
 //!   - Software shadow stack fallback (works on any RV32 hardware)
+//!   - KCFI: Type-based indirect call verification (software forward-edge CFI)
 //!
 //! All hardware CFI instructions are encoded as Zimop/Zcmop, meaning they
 //! execute as NOPs on hardware that lacks Zicfiss/Zicfilp support.
+//!
+//! KCFI places a type hash at [fn_addr - 4]. Before every indirect call,
+//! the caller loads and verifies this hash, trapping on type mismatch.
+//! Since -Zsanitizer=kcfi doesn't support RISC-V, we implement it by hand.
 
 #![no_std]
 #![no_main]
 
-use core::arch::{asm, naked_asm};
+use core::arch::{asm, global_asm, naked_asm};
 use core::panic::PanicInfo;
 
 // ============================================================================
@@ -28,6 +33,18 @@ use core::panic::PanicInfo;
 //
 // These are encoded in the Zimop (May-Be-Operations) space. On hardware
 // without Zicfiss/Zicfilp, they are guaranteed to execute as NOPs.
+//
+// KCFI (Kernel Control Flow Integrity):
+//   A 32-bit type hash is placed at [fn_addr - 4]. Before an indirect call,
+//   the caller loads the hash and compares it to the expected type. On
+//   mismatch, ebreak traps. In real LLVM KCFI, the hash is xxHash64 of the
+//   mangled type, truncated to 32 bits. We use recognizable constants.
+
+/// KCFI type hash for `fn(u32) -> u32` — used by triple, add_42, square.
+const KCFI_TYPE_FN_U32_U32: u32 = 0x4B43_4649; // ASCII "KCFI"
+
+/// KCFI type hash for `fn(fn(u32)->u32, u32) -> u32` — used by call_and_inc.
+const KCFI_TYPE_FN_FP_U32_U32: u32 = 0x4B43_4650; // ASCII "KCFP"
 
 // ============================================================================
 // Hardware CFI Macros (for use in non-naked functions)
@@ -149,117 +166,170 @@ fn uart_newline() {
 }
 
 // ============================================================================
-// Indirect Call Targets (with Landing Pads)
+// Indirect Call Targets (with Landing Pads + KCFI hashes)
 // ============================================================================
+//
+// Each function is defined via global_asm!() so we can place a 4-byte KCFI
+// type hash immediately before the symbol. The symbol points to the lpad
+// instruction, and the hash lives at [symbol - 4].
+//
+// Memory layout per function:
+//   [addr - 4]  .4byte KCFI_TYPE_HASH     ← type hash (never executed)
+//   [addr + 0]  .4byte lpad               ← landing pad (symbol points here)
+//   [addr + 4]  ... function body ...
 
-/// Multiply x by 3. Callable via function pointer.
-/// Has an unlabeled landing pad (lpad 0) at entry.
-/// Demonstrates full forward + backward edge CFI in a non-leaf function.
-#[unsafe(naked)]
-#[no_mangle]
-pub unsafe extern "C" fn triple(x: u32) -> u32 {
-    naked_asm!(
-        // Forward-edge CFI: landing pad
-        ".4byte 0x00000017",        // lpad 0
+global_asm!(
+    // -----------------------------------------------------------------
+    // triple: fn(u32) -> u32
+    // Multiply x by 3. Non-leaf with full forward + backward CFI.
+    // -----------------------------------------------------------------
+    ".balign 4",
+    ".4byte {kcfi_u32_u32}",            // KCFI type hash at triple-4
+    ".globl triple",
+    ".type triple, @function",
+    "triple:",
+    ".4byte 0x00000017",                // lpad 0 (forward-edge CFI)
 
-        // Backward-edge CFI: push ra to both shadow stacks
-        ".4byte 0x60100073",        // sspush ra (HW — NOP if no Zicfiss)
-        "addi   sp, sp, -16",
-        "sw     ra, 12(sp)",
-        "sw     gp, 8(sp)",
-        "sw     ra, 0(gp)",         // sw_sspush (software)
-        "addi   gp, gp, 4",
+    // Backward-edge CFI: push ra to both shadow stacks
+    ".4byte 0x60100073",                // sspush ra (HW — NOP if no Zicfiss)
+    "addi   sp, sp, -16",
+    "sw     ra, 12(sp)",
+    "sw     gp, 8(sp)",
+    "sw     ra, 0(gp)",                 // sw_sspush (software)
+    "addi   gp, gp, 4",
 
-        // Body: x * 3
-        "slli   t0, a0, 1",         // t0 = x << 1 = x*2
-        "add    a0, t0, a0",        // a0 = x*2 + x = x*3
+    // Body: x * 3
+    "slli   t0, a0, 1",                 // t0 = x << 1 = x*2
+    "add    a0, t0, a0",                // a0 = x*2 + x = x*3
 
-        // Backward-edge CFI: pop and check both shadow stacks
-        "addi   gp, gp, -4",        // sw_sspopchk (software)
-        "lw     t0, 0(gp)",
-        "lw     ra, 12(sp)",
-        "bne    t0, ra, 99f",
+    // Backward-edge CFI: pop and check both shadow stacks
+    "addi   gp, gp, -4",                // sw_sspopchk (software)
+    "lw     t0, 0(gp)",
+    "lw     ra, 12(sp)",
+    "bne    t0, ra, 99f",
 
-        "lw     gp, 8(sp)",
-        "addi   sp, sp, 16",
-        ".4byte 0x60500073",        // sspopchk ra (HW — NOP if no Zicfiss)
-        "ret",
+    "lw     gp, 8(sp)",
+    "addi   sp, sp, 16",
+    ".4byte 0x60500073",                // sspopchk ra (HW — NOP if no Zicfiss)
+    "ret",
 
-        "99: ebreak",               // Shadow stack mismatch fault
-    )
+    "99: ebreak",                        // Shadow stack mismatch fault
+    ".size triple, . - triple",
+
+    // -----------------------------------------------------------------
+    // add_42: fn(u32) -> u32
+    // Add 42 to x. Leaf function — no shadow stack needed.
+    // -----------------------------------------------------------------
+    ".balign 4",
+    ".4byte {kcfi_u32_u32}",            // KCFI type hash at add_42-4
+    ".globl add_42",
+    ".type add_42, @function",
+    "add_42:",
+    ".4byte 0x00000017",                // lpad 0
+    "addi   a0, a0, 42",
+    "ret",
+    ".size add_42, . - add_42",
+
+    // -----------------------------------------------------------------
+    // square: fn(u32) -> u32
+    // Square x. Leaf function with labeled landing pad (lpad 7).
+    // -----------------------------------------------------------------
+    ".balign 4",
+    ".4byte {kcfi_u32_u32}",            // KCFI type hash at square-4
+    ".globl square",
+    ".type square, @function",
+    "square:",
+    ".4byte {lpad_7}",                  // lpad 7
+    "mul    a0, a0, a0",
+    "ret",
+    ".size square, . - square",
+
+    // -----------------------------------------------------------------
+    // call_and_inc: fn(fn(u32)->u32, u32) -> u32
+    // Call a function pointer and add 1. Non-leaf with full CFI.
+    // Performs KCFI check on its target before the indirect call.
+    // -----------------------------------------------------------------
+    ".balign 4",
+    ".4byte {kcfi_fp_u32_u32}",         // KCFI type hash at call_and_inc-4
+    ".globl call_and_inc",
+    ".type call_and_inc, @function",
+    "call_and_inc:",
+    ".4byte 0x00000017",                // lpad 0 (forward-edge CFI)
+
+    // Backward-edge: push ra
+    ".4byte 0x60100073",                // sspush ra (HW)
+    "addi   sp, sp, -16",
+    "sw     ra, 12(sp)",
+    "sw     gp, 8(sp)",
+    "sw     ra, 0(gp)",                 // sw_sspush
+    "addi   gp, gp, 4",
+
+    // Prepare indirect call: a0 = fp, a1 = x
+    "mv     t1, a0",                    // t1 = fp (target address)
+    "mv     a0, a1",                    // a0 = x (arg for the target)
+
+    // KCFI check: verify type hash at [target - 4]
+    "lw     t2, -4(t1)",                // t2 = hash at target-4
+    "li     t3, {kcfi_u32_u32}",        // t3 = expected hash for fn(u32)->u32
+    "beq    t2, t3, 1f",
+    "ebreak",                            // KCFI type mismatch — trap
+    "1:",
+
+    "jalr   ra, t1, 0",                 // indirect call (type-verified)
+
+    // Add 1 to result
+    "addi   a0, a0, 1",
+
+    // Backward-edge: pop and check
+    "addi   gp, gp, -4",                // sw_sspopchk
+    "lw     t0, 0(gp)",
+    "lw     ra, 12(sp)",
+    "bne    t0, ra, 99f",
+
+    "lw     gp, 8(sp)",
+    "addi   sp, sp, 16",
+    ".4byte 0x60500073",                // sspopchk ra (HW)
+    "ret",
+
+    "99: ebreak",
+    ".size call_and_inc, . - call_and_inc",
+
+    // Template arguments
+    kcfi_u32_u32 = const KCFI_TYPE_FN_U32_U32,
+    kcfi_fp_u32_u32 = const KCFI_TYPE_FN_FP_U32_U32,
+    lpad_7 = const ((7u32 << 12) | 0x17),
+);
+
+// Extern declarations — these symbols are defined in the global_asm!() above.
+extern "C" {
+    fn triple(x: u32) -> u32;
+    fn add_42(x: u32) -> u32;
+    fn square(x: u32) -> u32;
+    fn call_and_inc(fp: unsafe extern "C" fn(u32) -> u32, x: u32) -> u32;
 }
 
-/// Add 42 to x. Callable via function pointer.
-/// Has an unlabeled landing pad (lpad 0) at entry.
-/// Leaf function — no shadow stack needed (no call, so ra is never saved).
-#[unsafe(naked)]
-#[no_mangle]
-pub unsafe extern "C" fn add_42(x: u32) -> u32 {
-    naked_asm!(
-        ".4byte 0x00000017",        // lpad 0
-        "addi   a0, a0, 42",
-        "ret",
-    )
-}
-
-/// Square x (x * x). Callable via function pointer.
-/// Has a labeled landing pad (lpad 7) — on Zicfilp hardware, only callers
-/// with label=7 in their indirect-call sequence can reach this function.
-#[unsafe(naked)]
-#[no_mangle]
-pub unsafe extern "C" fn square(x: u32) -> u32 {
-    naked_asm!(
-        ".4byte {lpad_7}",          // lpad 7
-        "mul    a0, a0, a0",
-        "ret",
-        lpad_7 = const ((7u32 << 12) | 0x17),
-    )
-}
-
 // ============================================================================
-// Non-leaf function demonstrating full CFI protection
+// KCFI Check Helper (for Rust-level indirect calls)
 // ============================================================================
 
-/// Call a function pointer and add 1 to the result.
-/// Demonstrates full forward+backward CFI in a non-leaf function that
-/// itself performs an indirect call.
-#[unsafe(naked)]
-#[no_mangle]
-pub unsafe extern "C" fn call_and_inc(fp: unsafe extern "C" fn(u32) -> u32, x: u32) -> u32 {
-    naked_asm!(
-        // Forward-edge: landing pad
-        ".4byte 0x00000017",        // lpad 0
-
-        // Backward-edge: push ra
-        ".4byte 0x60100073",        // sspush ra (HW)
-        "addi   sp, sp, -16",
-        "sw     ra, 12(sp)",
-        "sw     gp, 8(sp)",
-        "sw     ra, 0(gp)",         // sw_sspush
-        "addi   gp, gp, 4",
-
-        // Call the function pointer: a0 = fp, a1 = x
-        // RISC-V calling convention: a0 = first arg, a1 = second arg
-        "mv     t1, a0",            // t1 = fp
-        "mv     a0, a1",            // a0 = x (arg for the target)
-        "jalr   ra, t1, 0",         // indirect call through fp
-
-        // Add 1 to result
-        "addi   a0, a0, 1",
-
-        // Backward-edge: pop and check
-        "addi   gp, gp, -4",        // sw_sspopchk
-        "lw     t0, 0(gp)",
-        "lw     ra, 12(sp)",
-        "bne    t0, ra, 99f",
-
-        "lw     gp, 8(sp)",
-        "addi   sp, sp, 16",
-        ".4byte 0x60500073",        // sspopchk ra (HW)
-        "ret",
-
-        "99: ebreak",
-    )
+/// Verify KCFI hash for a `fn(u32) -> u32` target. Traps on mismatch.
+///
+/// Loads the 4 bytes at [fp - 4] and compares to KCFI_TYPE_FN_U32_U32.
+/// If the hash doesn't match, executes `ebreak` to signal a KCFI violation.
+#[inline(always)]
+unsafe fn kcfi_check_u32_u32(fp: unsafe extern "C" fn(u32) -> u32) {
+    asm!(
+        "lw   {tmp}, -4({fp})",
+        "li   {exp}, {hash}",
+        "beq  {tmp}, {exp}, 1f",
+        "ebreak",
+        "1:",
+        fp = in(reg) fp,
+        tmp = out(reg) _,
+        exp = out(reg) _,
+        hash = const KCFI_TYPE_FN_U32_U32,
+        options(nostack),
+    );
 }
 
 // ============================================================================
@@ -283,10 +353,14 @@ static DISPATCH_TABLE: [DispatchEntry; 3] = [
 ];
 
 /// Look up and call a handler by ID.
+/// Performs a KCFI type check before each indirect call.
 fn dispatch(id: u32, arg: u32) -> Option<u32> {
     for entry in &DISPATCH_TABLE {
         if entry.id == id {
-            return Some(unsafe { (entry.handler)(arg) });
+            unsafe {
+                kcfi_check_u32_u32(entry.handler);
+                return Some((entry.handler)(arg));
+            }
         }
     }
     None
@@ -477,12 +551,74 @@ pub extern "C" fn main() -> ! {
     }
     uart_newline();
 
+    // --- Test 6: KCFI (type-based indirect call verification) ---
+    uart_puts("[Test 6] KCFI type hash verification\r\n");
+    uart_puts("  (Type hash at [fn-4] checked before every indirect call)\r\n");
+    {
+        // Read and display KCFI hashes from memory at each function's addr - 4
+        let hash_triple: u32 = unsafe { *((triple as *const u8).sub(4) as *const u32) };
+        uart_puts("  hash at triple-4:       ");
+        uart_put_hex32(hash_triple);
+        uart_puts(" (expected ");
+        uart_put_hex32(KCFI_TYPE_FN_U32_U32);
+        uart_puts(")\r\n");
+
+        let hash_add_42: u32 = unsafe { *((add_42 as *const u8).sub(4) as *const u32) };
+        uart_puts("  hash at add_42-4:       ");
+        uart_put_hex32(hash_add_42);
+        uart_puts(" (expected ");
+        uart_put_hex32(KCFI_TYPE_FN_U32_U32);
+        uart_puts(")\r\n");
+
+        let hash_square: u32 = unsafe { *((square as *const u8).sub(4) as *const u32) };
+        uart_puts("  hash at square-4:       ");
+        uart_put_hex32(hash_square);
+        uart_puts(" (expected ");
+        uart_put_hex32(KCFI_TYPE_FN_U32_U32);
+        uart_puts(")\r\n");
+
+        let hash_cai: u32 = unsafe { *((call_and_inc as *const u8).sub(4) as *const u32) };
+        uart_puts("  hash at call_and_inc-4: ");
+        uart_put_hex32(hash_cai);
+        uart_puts(" (expected ");
+        uart_put_hex32(KCFI_TYPE_FN_FP_U32_U32);
+        uart_puts(")\r\n");
+
+        // Verify KCFI check passes for correct types
+        uart_puts("  kcfi_check triple:  ");
+        unsafe { kcfi_check_u32_u32(triple) };
+        uart_puts("PASS\r\n");
+
+        uart_puts("  kcfi_check add_42:  ");
+        unsafe { kcfi_check_u32_u32(add_42) };
+        uart_puts("PASS\r\n");
+
+        uart_puts("  kcfi_check square:  ");
+        unsafe { kcfi_check_u32_u32(square) };
+        uart_puts("PASS\r\n");
+
+        // Verify KCFI-checked dispatch
+        uart_puts("  KCFI dispatch(0, 5) = ");
+        if let Some(r) = dispatch(0, 5) {
+            uart_put_dec(r);
+            uart_puts(" (expected 15)\r\n");
+        }
+
+        // call_and_inc internally KCFI-checks its target
+        let r = unsafe { call_and_inc(add_42, 10) };
+        uart_puts("  KCFI call_and_inc(add_42, 10) = ");
+        uart_put_dec(r);
+        uart_puts(" (expected 53)\r\n");
+    }
+    uart_newline();
+
     // --- Summary ---
     uart_puts("============================================\r\n");
     uart_puts("  CFI Protection Summary:\r\n");
     uart_puts("  - Forward-edge:  lpad at indirect call targets\r\n");
     uart_puts("  - Backward-edge: sspush/sspopchk in prologue/epilogue\r\n");
     uart_puts("  - Fallback:      software shadow stack via gp register\r\n");
+    uart_puts("  - Type-based:    KCFI hash at [fn-4] checked before indirect calls\r\n");
     uart_puts("  - HW instructions are NOPs on non-CFI hardware (safe)\r\n");
     uart_puts("============================================\r\n");
     uart_puts("\r\nAll tests passed.\r\n");

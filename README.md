@@ -5,6 +5,7 @@ A `#![no_std]` Rust project demonstrating **DIY Control Flow Integrity** on RV32
 - **Zicfilp** — forward-edge CFI via landing pads (`lpad`) at indirect call/jump targets
 - **Zicfiss** — backward-edge CFI via hardware shadow stack (`sspush`/`sspopchk`)
 - **Software shadow stack** — always-available fallback using the `gp` register
+- **DIY KCFI** — type-based indirect call verification (type hash at `[fn-4]`, checked before every indirect call)
 
 All hardware CFI instructions are encoded in the **Zimop/Zcmop** (May-Be-Operations) space, so they execute as NOPs on hardware that lacks CFI support. This gives you defense-in-depth: hardware enforcement when available, graceful degradation when not.
 
@@ -17,6 +18,7 @@ All hardware CFI instructions are encoded in the **Zimop/Zcmop** (May-Be-Operati
 | 3 | Dispatch table pattern — typical real-world use case for forward-edge CFI |
 | 4 | Non-leaf `call_and_inc` with full forward + backward CFI |
 | 5 | Shadow stack pointer inspection |
+| 6 | KCFI type hash verification — reads hashes from memory, verifies checks pass |
 
 ## Building
 
@@ -66,14 +68,27 @@ Expected output:
   call_and_inc(add_42, 0) = 43 (expected 43: add_42(0)=42, +1=43)
 
 [Test 5] Shadow stack pointer inspection
-  Software SSP (gp) = 0x800c1000
+  Software SSP (gp) = 0x80083000
   (Hardware SSP via CSR 0x011 — available on Zicfiss HW only)
+
+[Test 6] KCFI type hash verification
+  (Type hash at [fn-4] checked before every indirect call)
+  hash at triple-4:       0x4b434649 (expected 0x4b434649)
+  hash at add_42-4:       0x4b434649 (expected 0x4b434649)
+  hash at square-4:       0x4b434649 (expected 0x4b434649)
+  hash at call_and_inc-4: 0x4b434650 (expected 0x4b434650)
+  kcfi_check triple:  PASS
+  kcfi_check add_42:  PASS
+  kcfi_check square:  PASS
+  KCFI dispatch(0, 5) = 15 (expected 15)
+  KCFI call_and_inc(add_42, 10) = 53 (expected 53)
 
 ============================================
   CFI Protection Summary:
   - Forward-edge:  lpad at indirect call targets
   - Backward-edge: sspush/sspopchk in prologue/epilogue
   - Fallback:      software shadow stack via gp register
+  - Type-based:    KCFI hash at [fn-4] checked before indirect calls
   - HW instructions are NOPs on non-CFI hardware (safe)
 ============================================
 
@@ -95,10 +110,21 @@ All tests passed.
     └── cfi.md                   # Detailed implementation guide
 ```
 
+## DIY KCFI
+
+LLVM's `-Zsanitizer=kcfi` inserts type hashes before function entries and checks them at indirect call sites — but it only supports **x86_64** and **aarch64**, not RISC-V. So we implement it by hand:
+
+- A 32-bit type hash is placed at `[fn_addr - 4]` (immediately before the landing pad)
+- Before every indirect call, the caller loads the hash and compares it to the expected type
+- On mismatch, `ebreak` traps — preventing calls through corrupted or type-confused function pointers
+- Functions are defined via `global_asm!()` to control symbol placement relative to the hash
+
+This mirrors exactly how LLVM's KCFI backend works (xxHash64 of the mangled type, truncated to 32 bits, placed at offset -4).
+
 ## Key design decisions
 
 - **`gp` as software shadow stack pointer** — requires `--no-relax` to disable GP relaxation
-- **`#[unsafe(naked)]` + `naked_asm!()`** — modern Rust naked function API (stable since 1.88.0)
+- **`global_asm!()` for CFI functions** — allows placing KCFI hash at `[symbol - 4]` before the landing pad
 - **Raw `.4byte` encodings** — necessary because LLVM doesn't yet emit `lpad`/`sspush`/`sspopchk` for RISC-V
 - **Trap handler for CSR access** — graceful degradation on hardware/emulators without CFI CSRs
 
